@@ -825,7 +825,11 @@
       </div>
       <div class="control-group">
         <label>📆 التاريخ</label>
-        <input type="date" class="date-input" id="dateInput">
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="day-select" id="dateDay" style="flex:1;min-width:0"></select>
+          <select class="day-select" id="dateMonth" style="flex:1.4;min-width:0"></select>
+          <select class="day-select" id="dateYear" style="flex:1.2;min-width:0"></select>
+        </div>
       </div>
       <div class="control-group">
         <label>🚫 المعلمون الغائبون <span id="absentCount" style="color:var(--danger)"></span></label>
@@ -4880,8 +4884,34 @@
     // تمييز خلايا الاستعصاء، تقرير غني، ووضع اختبارات (?tests=1)
     // ============================================================
     function init() {
+      // بناء قوائم منتقي التاريخ
+      const daySelect = document.getElementById("dateDay");
+      const monthSelect = document.getElementById("dateMonth");
+      const yearSelect = document.getElementById("dateYear");
+
+      for (let d = 1; d <= 31; d++) {
+        const o = document.createElement("option");
+        o.value = d; o.textContent = d;
+        daySelect.appendChild(o);
+      }
+      const months = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+      months.forEach(function(m, i) {
+        const o = document.createElement("option");
+        o.value = i + 1; o.textContent = m;
+        monthSelect.appendChild(o);
+      });
+      const curYear = new Date().getFullYear();
+      for (let y = curYear - 1; y <= curYear + 2; y++) {
+        const o = document.createElement("option");
+        o.value = y; o.textContent = y;
+        yearSelect.appendChild(o);
+      }
+
+      // تعيين تاريخ اليوم
       const today = new Date();
-      document.getElementById("dateInput").value = today.toISOString().split("T")[0];
+      daySelect.value = today.getDate();
+      monthSelect.value = today.getMonth() + 1;
+      yearSelect.value = today.getFullYear();
       updateDateDisplay();
 
       const dayMap = { 0: "الأحد", 1: "الاثنين", 2: "الثلاثاء", 3: "الأربعاء", 4: "الخميس", 5: "الجمعة", 6: "السبت" };
@@ -4896,7 +4926,9 @@
         renderTeacherChips();
         applyTeacherFilter();
       });
-      document.getElementById("dateInput").addEventListener("change", updateDateDisplay);
+      daySelect.addEventListener("change", updateDateDisplay);
+      monthSelect.addEventListener("change", updateDateDisplay);
+      yearSelect.addEventListener("change", updateDateDisplay);
       const filterInput = document.getElementById("teacherFilter");
       if (filterInput) filterInput.addEventListener("input", applyTeacherFilter);
     }
@@ -4911,11 +4943,28 @@
       });
     }
 
+    function getSelectedDate() {
+      const d = document.getElementById("dateDay").value;
+      const m = document.getElementById("dateMonth").value;
+      const y = document.getElementById("dateYear").value;
+      if (!d || !m || !y) return "";
+      return y + "-" + String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+    }
+
+    function getSelectedDateArabic() {
+      const d = document.getElementById("dateDay").value;
+      const months = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+      const m = parseInt(document.getElementById("dateMonth").value);
+      const y = document.getElementById("dateYear").value;
+      if (!d || !m || !y) return "";
+      return d + " " + months[m-1] + " " + y;
+    }
+
     function updateDateDisplay() {
       const day = document.getElementById("daySelect").value;
-      const date = document.getElementById("dateInput").value;
+      const dateAr = getSelectedDateArabic();
       const display = document.getElementById("dateDisplay");
-      if (day && date) display.textContent = day + " — " + date;
+      if (day && dateAr) display.textContent = day + " — " + dateAr;
       else if (day) display.textContent = day;
       else display.textContent = "";
     }
@@ -4984,7 +5033,7 @@
     function runCompensation() {
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("اختر اليوم أولًا"); return; }
-      const date = document.getElementById("dateInput").value || "";
+      const date = getSelectedDate() || "";
       const absent = [];
       document.querySelectorAll(".teacher-chip.selected").forEach(chip => absent.push(chip.dataset.teacher));
       if (absent.length === 0) { alert("اختر معلمًا غائبًا واحدًا على الأقل"); return; }
