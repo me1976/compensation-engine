@@ -3226,10 +3226,10 @@
       const partialMark = completion === "PARTIAL" ? " — مع فراغ متبقٍ ⚠" : "";
       const map = {
         "SUCCESS_DIRECT": '<span class="status-badge status-success">سحب مباشر ✓' + partialMark + "</span>",
-        "SUCCESS_RIPPLE": '<span class="status-badge status-success">خلخلة ✓' + partialMark + "</span>",
-        "SUCCESS_CROSS_CLASS": '<span class="status-badge status-success">عابر للشعب ✓' + partialMark + "</span>",
+        "SUCCESS_RIPPLE": '<span class="status-badge status-success">تبديل داخلي ✓' + partialMark + "</span>",
+        "SUCCESS_CROSS_CLASS": '<span class="status-badge status-success">تبديل عابر ✓' + partialMark + "</span>",
         "SUCCESS_NO_ACTION": '<span class="status-badge status-noaction">فراغ محظوظ ✓</span>',
-        "FALLBACK": '<span class="status-badge status-fallback">استعصاء ✗</span>',
+        "FALLBACK": '<span class="status-badge status-fallback">يحتاج قرار ✗</span>',
         "PENDING": '<span class="status-badge">قيد المعالجة</span>'
       };
       return map[status] || status;
@@ -3272,36 +3272,14 @@
       }
       html += '</div>';
 
-      // الشعب المتأثرة + مسار الفراغات + Final_Gap
-      html += '<div class="report-section"><h2>📋 الشعب المتأثرة ومسار الفراغات</h2>';
+      // [مخفي من الواجهة — البيانات متاحة في الخلفية للاستخدام التقني]
+      // قسم: الشعب المتأثرة ومسار الفراغات — يُحسب لكنه لا يُعرض
       const byClass = {};
       for (const v of vacancies) {
         if (!byClass[v.className]) byClass[v.className] = [];
         byClass[v.className].push(v);
       }
       const classNames = Object.keys(byClass);
-      if (!classNames.length) html += '<div class="report-item">لا توجد شعب متأثرة.</div>';
-      for (const cls of classNames) {
-        const oe = originalEndMap[cls];
-        html += '<div class="report-item"><strong>' + esc(cls) + '</strong> (Original_End = ' + oe + ')<br>';
-        for (const v of byClass[cls]) {
-          const ch = v.chain;
-          html += 'الحصة ' + v.period + ': غياب ' + esc(v.absentTeacher) + ' (' + esc(v.subject) + ') → ' +
-            getStatusBadge(v.status, ch && ch.completion);
-          if (ch && ch.completion === "PARTIAL") {
-            html += '<br><span class="label">Final_Gap: الحصة ' + ch.finalGap +
-              ' (داخل الدوام — فراغ متبقٍ يحتاج متابعة/قرارًا إداريًا)</span>';
-            if (ch.gapBlockedReason)
-              html += '<br><span class="label">سبب تعذر دفعه إلى نهاية الدوام:</span> <span style="color:var(--warning)">' +
-                esc(ch.gapBlockedReason) + '</span>';
-          } else if (ch && ch.completion === "COMPLETE" && ch.status !== "SUCCESS_NO_ACTION") {
-            html += ' <span style="color:var(--text2)">— Final_Gap: الحصة ' + ch.finalGap + ' (عند نهاية الدوام — منطقة الاستقبال) — نجاح مكتمل</span>';
-          }
-          html += '<br>';
-        }
-        html += '</div>';
-      }
-      html += '</div>';
 
       // الحركات
       if (movementLog.length > 0) {
@@ -3317,7 +3295,7 @@
 
         const rippleChains = chains.filter(c => movementLog.some(m => m.chainId === c.id && m.movementType === "RIPPLE_SWAP"));
         if (rippleChains.length) {
-          html += '<h3>🔀 خلخلة (' + movementLog.filter(m => m.movementType === "RIPPLE_SWAP").length + ' حركة)</h3>';
+          html += '<h3>🔀 تبديل داخلي (' + movementLog.filter(m => m.movementType === "RIPPLE_SWAP").length + ' حركة)</h3>';
           for (const c of rippleChains) {
             const mvs = movementLog.filter(m => m.chainId === c.id);
             const steps = mvs.map(m => esc(m.teacher) + ': ' + m.fromPeriod + '→' + m.toPeriod).join('، ');
@@ -3355,25 +3333,7 @@
         html += '</div>';
       }
 
-      // الفراغات النهائية (مميزة النوع)
-      html += '<div class="report-section"><h2>⬜ الفراغات النهائية الناتجة عن ضغط الدوام</h2>';
-      // نستخدم res الممررة — لا استدعاء مزدوج لـ buildResults
-      let hasGaps = false;
-      for (const g of res.finalGaps) {
-        hasGaps = true;
-        const isAbsence = g.type === LessonStatus.ABSENCE_EMPTY;
-        const color = isAbsence ? "var(--absence)" : "var(--shift-empty)";
-        let desc;
-        if (isAbsence && g.atEnd) desc = "فراغ غياب عند نهاية الدوام (فراغ محظوظ) — ضمن القواعد";
-        else if (isAbsence) desc = "فراغ غياب غير معوض — استعصاء يحتاج قرارًا إداريًا";
-        else if (g.atEnd) desc = "فراغ ناتج عن ضغط الدوام (عند نهاية الدوام) — ضمن القواعد";
-        else desc = "فراغ ضغط متبقٍ (داخل الدوام) — يحتاج متابعة/قرارًا إداريًا";
-        html += '<div class="report-item">' + esc(g.className) + ': الحصة ' + g.period +
-          ' — <span style="color:' + color + '">' + desc + '</span>' +
-          (g.needsAttention ? ' <span style="color:var(--fallback)">⚠</span>' : '') + '</div>';
-      }
-      if (!hasGaps) html += '<div class="report-item">لا توجد فراغات داخلية متبقية ✓</div>';
-      html += '</div>';
+      // [مخفي من الواجهة — البيانات متاحة في res.finalGaps للاستخدام التقني]
 
       // الاستعصاءات مع الأسباب التفصيلية
       html += '<div class="report-section"><h2>⚠️ الاستعصاءات (تحتاج قرارًا إداريًا)</h2>';
@@ -3411,33 +3371,31 @@
         html += '</div>';
       }
 
-      // فحص السلامة الكامل A–P
-      html += '<div class="report-section"><h2>🔒 فحص السلامة (Integrity)</h2><div class="report-item">';
-      for (const key of Object.keys(INTEGRITY_LABELS)) {
-        const v = integrity[key];
-        const icon = v && v.valid ? '✅' : '❌';
-        html += icon + ' ' + INTEGRITY_LABELS[key];
-        if (!v || !v.valid) html += '<br><span style="color:var(--fallback);font-size:0.85em">' +
-          esc((v && v.errors || []).join(' — ')).slice(0, 400) + '</span>';
-        html += '<br>';
+      // [مخفي من الواجهة — فحص السلامة يعمل في الخلفية ونتائجه في integrity.allPassed]
+      // يُعرض تحذير مرئي فقط إذا فشل أي فحص
+      if (!integrity.allPassed) {
+        html += '<div class="report-section" style="border-color:var(--danger)">' +
+          '<h2 style="color:var(--danger)">⚠️ تحذير: خطأ في سلامة البيانات</h2>' +
+          '<div class="report-item" style="color:var(--danger)">' +
+          esc(integrity.issues.slice(0, 5).join(' | ')) +
+          '</div></div>';
       }
-      html += '</div></div>';
 
       // الملخص الإحصائي
       const s = res.stats;
       html += '<div class="report-section"><h2>📈 الملخص الإحصائي</h2><div class="stat-grid">' +
         statCard(s.absentTeachers, "معلمون غائبون") +
         statCard(s.affectedClasses, "شعب متأثرة") +
-        statCard(s.completeSuccess, "نجاح مكتمل (عند End)") +
-        statCard(s.partialSuccess, "نجاح مع فراغ متبقٍ") +
+        statCard(s.completeSuccess, "نجاح مكتمل") +
+        statCard(s.partialSuccess, "نجاح جزئي") +
         statCard(s.compensatedVacancies, "حصص معوضة") +
         statCard(s.noActionVacancies, "فراغ محظوظ") +
         statCard(s.totalMovements, "إجمالي الحركات") +
         statCard(s.directMoves, "سحب مباشر") +
-        statCard(s.rippleMoves, "خلخلة") +
-        statCard(s.crossClassChains, "عابر للشعب") +
+        statCard(s.rippleMoves, "تبديل داخلي") +
+        statCard(s.crossClassChains, "تبديل عابر") +
         statCard(s.finalGaps, "فراغات نهائية") +
-        statCard(s.fallbacks, "استعصاءات") +
+        statCard(s.fallbacks, "تحتاج قرار") +
         '</div></div>';
 
       return html;
