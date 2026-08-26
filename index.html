@@ -2014,10 +2014,10 @@
     }
 
     function executeRipple(path, cls, day, chainId) {
-      if (detectRippleLoop(path)) throw new Error("كُشفت دورة في مسار الخلخلة");
+      if (detectRippleLoop(path)) throw new Error("كُشفت دورة في مسار الداخلي");
       for (const step of path) {
         executeMove(cls, step.fromPeriod, step.toPeriod, day, "RIPPLE_SWAP",
-          "خلخلة: دفع الفراغ من الحصة " + step.toPeriod + " نحو نهاية الدوام", chainId);
+          "داخلي: دفع الفراغ من الحصة " + step.toPeriod + " نحو نهاية الدوام", chainId);
       }
     }
 
@@ -2321,7 +2321,7 @@
       if (best) {
         executeMove(cls, best.fromPeriod, T, day, "DIRECT_TAIL_PULL",
           "تغطية فراغ غياب " + v.absentTeacher + " في الحصة " + T +
-          " بأفضل سحب ممكن (بحث شامل قارن كل المرشحين ومحاكاة الخلخلة الناتجة عن كل منهم)",
+          " بأفضل سحب ممكن (بحث شامل قارن كل المرشحين ومحاكاة الداخلي الناتجة عن كل منهم)",
           chain.id);
         chain.lastStageReached = "RIPPLE";
         if (best.ripplePath.length) executeRipple(best.ripplePath, cls, day, chain.id);
@@ -2359,7 +2359,7 @@
     }
 
     function processCompensation(day) {
-      const classOrder = function(a, b) {
+      const classOrder = function (a, b) {
         const ea = originalEndMap[a.className] != null ? originalEndMap[a.className] : a.originalEnd;
         const eb = originalEndMap[b.className] != null ? originalEndMap[b.className] : b.originalEnd;
         if (ea !== eb) return ea - eb;
@@ -2376,7 +2376,7 @@
           if (cell && isActiveLesson(cell)) cell.protectedTargetOf = ch.id;
         }
       }
-      const partials = chains.filter(function(c) {
+      const partials = chains.filter(function (c) {
         return c.moves.length > 0 && c.completion === "PARTIAL";
       }).sort(classOrder);
       for (const c of partials) {
@@ -2458,7 +2458,7 @@
                 : " — لا يوجد تخفيف ممكن (ينقص دوامهم حصة فعلية)")
           });
         }
-        options.sort(function(a, b) {
+        options.sort(function (a, b) {
           const sa = (a.absorb ? 2 : 0) + (a.subjectMatch ? 1 : 0);
           const sb = (b.absorb ? 2 : 0) + (b.subjectMatch ? 1 : 0);
           return sb - sa;
@@ -2538,8 +2538,8 @@
 
       const stats = {
         absentTeachers: absentList.length,
-        completeSuccess: chains.filter(function(c) { return c.moves.length > 0 && c.completion === "COMPLETE"; }).length,
-        partialSuccess: chains.filter(function(c) { return c.moves.length > 0 && c.completion === "PARTIAL"; }).length,
+        completeSuccess: chains.filter(function (c) { return c.moves.length > 0 && c.completion === "COMPLETE"; }).length,
+        partialSuccess: chains.filter(function (c) { return c.moves.length > 0 && c.completion === "PARTIAL"; }).length,
         affectedClasses: affectedClasses.length,
         compensatedVacancies: chains.filter(c => c.status && c.status.indexOf("SUCCESS") === 0 && c.status !== "SUCCESS_NO_ACTION").length,
         noActionVacancies: chains.filter(c => c.status === "SUCCESS_NO_ACTION").length,
@@ -2597,7 +2597,7 @@
     }
 
     function esc(s) {
-      return String(s == null ? "" : s).replace(/[&<>"]/g, function(c) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
       });
     }
@@ -2760,7 +2760,7 @@
         daySelect.appendChild(o);
       }
       const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
-      months.forEach(function(m, i) {
+      months.forEach(function (m, i) {
         const o = document.createElement("option");
         o.value = i + 1;
         o.textContent = m;
@@ -2787,7 +2787,7 @@
       }
 
       renderTeacherChips();
-      document.getElementById("daySelect").addEventListener("change", function() {
+      document.getElementById("daySelect").addEventListener("change", function () {
         updateDateDisplay();
         renderTeacherChips();
         applyTeacherFilter();
@@ -2802,7 +2802,7 @@
     function applyTeacherFilter() {
       const filterInput = document.getElementById("teacherFilter");
       const q = (filterInput ? filterInput.value : "").trim();
-      document.querySelectorAll(".teacher-chip").forEach(function(chip) {
+      document.querySelectorAll(".teacher-chip").forEach(function (chip) {
         const match = !q || chip.dataset.teacher.indexOf(q) >= 0;
         chip.classList.toggle("hidden-by-filter", !match);
       });
@@ -2861,7 +2861,7 @@
         chip.innerHTML = "<span>" + esc(t) + "</span>" +
           (count > 0 ? '<span class="chip-count">' + count + " حصة</span>" : '<span class="chip-count">لا حصص اليوم</span>') +
           '<span class="check"></span>';
-        chip.addEventListener("click", function() { toggleTeacher(chip, t); });
+        chip.addEventListener("click", function () { toggleTeacher(chip, t); });
         grid.appendChild(chip);
       }
     }
@@ -2929,7 +2929,7 @@
     }
 
     function resetSelections() {
-      document.querySelectorAll(".teacher-chip.selected").forEach(function(chip) {
+      document.querySelectorAll(".teacher-chip.selected").forEach(function (chip) {
         chip.classList.remove("selected");
       });
       document.getElementById("absentCount").textContent = "";
@@ -2939,8 +2939,10 @@
       document.getElementById("scheduleTableWrapper").innerHTML = "";
       document.getElementById("reportContainer").innerHTML = "";
       const filterInput = document.getElementById("teacherFilter");
-      if (filterInput) { filterInput.value = "";
-        applyTeacherFilter(); }
+      if (filterInput) {
+        filterInput.value = "";
+        applyTeacherFilter();
+      }
     }
 
     function renderScheduleTable(day) {
@@ -2973,7 +2975,7 @@
             const isRipple = movementLog.some(m => m.movementType === "RIPPLE_SWAP" && m.targetClass === cls && m.toPeriod === p);
             cellClass = (isCross ? "cell-cross" : "cell-shifted") + (isFallbackTarget ? " cell-fallback" : "");
             const badge = isCross ? '<span class="move-badge cross">عابر</span>'
-              : isRipple ? '<span class="move-badge ripple">خلخلة</span>'
+              : isRipple ? '<span class="move-badge ripple">داخلي</span>'
                 : '<span class="move-badge direct">مباشر</span>';
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
               '</span><span class="teacher-name">' + esc(lesson.teacher) + "</span>" + badge +
@@ -3004,7 +3006,7 @@
     // BOOT
     // ============================================================
     if (typeof document !== "undefined") {
-      document.addEventListener("DOMContentLoaded", function() {
+      document.addEventListener("DOMContentLoaded", function () {
         init();
       });
     }
