@@ -3168,10 +3168,15 @@
           let cellClass = "";
           let content = "";
 
-          if (lesson.status === LessonStatus.NORMAL) {
+                    if (lesson.status === LessonStatus.NORMAL) {
             cellClass = "cell-normal" + (isFallbackTarget ? " cell-fallback" : "");
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
               '</span><span class="teacher-name">' + esc(lesson.teacher) + "</span></div>";
+          } else if (lesson.status === LessonStatus.OCCUPANCY) {
+            cellClass = "cell-occupancy" + (isFallbackTarget ? " cell-fallback" : "");
+            content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
+              '</span><span class="teacher-name" style="color:var(--success);font-weight:bold;">' + esc(lesson.teacher) + 
+              '</span><span style="font-size:0.7em;color:var(--text2)">بدل: ' + esc(lesson.originalTeacher) + '</span></div>';
           } else if (lesson.status === LessonStatus.SHIFTED) {
             const isCross = movementLog.some(m => m.movementType === "CROSS_CLASS_CASCADE" && m.targetClass === cls && m.toPeriod === p);
             const isRipple = movementLog.some(m => m.movementType === "RIPPLE_SWAP" && m.targetClass === cls && m.toPeriod === p);
