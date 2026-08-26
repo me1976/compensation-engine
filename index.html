@@ -2968,7 +2968,7 @@
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("الرجاء اختيار اليوم أولاً"); return; }
       
-      const absentCount = selectedAbsentees.size;
+      const absentCount = absentList.length;
       if (absentCount === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل"); return; }
 
       // Reset FIELD_SCHEDULE for the day to original
@@ -2983,15 +2983,15 @@
         for (let p = 1; p <= 7; p++) {
           const l = origDay[cls] && origDay[cls][p];
           if (l && isRealLessonData(l.teacher, l.subject)) {
-            if (selectedAbsentees.has(l.teacher)) {
+            if (isAbsent(l.teacher)) {
               let sub = "إدارة المدرسة";
               const periodName = PERIOD_NAMES[p];
               
               if (typeof ashghalData !== 'undefined' && ashghalData[day] && ashghalData[day][periodName] && ashghalData[day][periodName][cls]) {
                 const record = ashghalData[day][periodName][cls];
-                if (record.sub1 && !selectedAbsentees.has(record.sub1)) sub = record.sub1;
-                else if (record.sub2 && !selectedAbsentees.has(record.sub2)) sub = record.sub2;
-                else if (record.sub3 && !selectedAbsentees.has(record.sub3)) sub = record.sub3;
+                if (record.sub1 && !isAbsent(record.sub1)) sub = record.sub1;
+                else if (record.sub2 && !isAbsent(record.sub2)) sub = record.sub2;
+                else if (record.sub3 && !isAbsent(record.sub3)) sub = record.sub3;
               }
               
               FIELD_SCHEDULE[day][cls][p] = {
