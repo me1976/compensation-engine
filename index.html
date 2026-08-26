@@ -1646,6 +1646,8 @@
 
     const ALL_TEACHERS = extractAllTeachers();
 
+    const EXCLUDED_TEACHERS = ["عمار"];
+
     const PERIOD_NAMES = { 1: "الأولى", 2: "الثانية", 3: "الثالثة", 4: "الرابعة", 5: "الخامسة", 6: "السادسة", 7: "السابعة" };
 
     const LessonStatus = {
@@ -1890,6 +1892,7 @@
     // CORE FUNCTIONS
     // ============================================================
     function isTeacherFree(teacher, day, period) {
+      if (EXCLUDED_TEACHERS.includes(teacher)) return false;
       if (!teacherState[teacher]) return false;
       if (isAbsent(teacher)) return false;
       for (const cls of ALL_CLASSES) {
@@ -2022,6 +2025,7 @@
         return nr;
       };
       const busyAt = (teacher, q, simRow) => {
+        if (EXCLUDED_TEACHERS.includes(teacher)) return true;
         if (!teacherState[teacher]) return true;
         if (isAbsent(teacher)) return true;
         const sc = simRow[q];
@@ -2925,6 +2929,7 @@
       const day = document.getElementById("daySelect").value;
       const loads = dayLoads(day);
       for (const t of ALL_TEACHERS) {
+          if (EXCLUDED_TEACHERS.includes(t)) continue;
         const count = loads[t] || 0;
         const chip = document.createElement("div");
         chip.className = "teacher-chip" + (count === 0 ? " zero-load" : "");
