@@ -1646,7 +1646,36 @@
 
     const ALL_TEACHERS = extractAllTeachers();
 
-    const EXCLUDED_TEACHERS = ["عمار"];
+    const ENGINE_CONFIG = Object.freeze({
+      EXCLUDED_TEACHERS: ["عمار"],
+      OCCUPANCY_EXEMPT_TEACHERS: [],
+      MAX_DAILY_TOTAL: 6,
+      MAX_OCCUPANCY_PER_DAY: 6,
+      FAIRNESS_STORAGE_KEY: "sqs_fairness_v1"
+    });
+
+    const FairnessLedger = (() => {
+      let ledger = {};
+      try { ledger = JSON.parse(localStorage.getItem(ENGINE_CONFIG.FAIRNESS_STORAGE_KEY)) || {}; } catch (_) {}
+      const get = (t) => Number(ledger[t]) || 0;
+      return {
+        get,
+        add(dateStr, assignments) {
+          for (const t of assignments) {
+            if (!ledger[t]) ledger[t] = 0;
+            ledger[t]++;
+          }
+          try { localStorage.setItem(ENGINE_CONFIG.FAIRNESS_STORAGE_KEY, JSON.stringify(ledger)); } catch (_) {}
+        },
+        clear() {
+          ledger = {};
+          try { localStorage.removeItem(ENGINE_CONFIG.FAIRNESS_STORAGE_KEY); } catch (_) {}
+        }
+      };
+    })();
+
+    function isExcludedFromAll(t) { return ENGINE_CONFIG.EXCLUDED_TEACHERS.includes(t); }
+    function isExemptFromOccupancy(t) { return isExcludedFromAll(t) || ENGINE_CONFIG.OCCUPANCY_EXEMPT_TEACHERS.includes(t); }
 
     const PERIOD_NAMES = { 1: "الأولى", 2: "الثانية", 3: "الثالثة", 4: "الرابعة", 5: "الخامسة", 6: "السادسة", 7: "السابعة" };
 
@@ -1655,6 +1684,7 @@
       SHIFTED: "SHIFTED",
       ABSENCE_EMPTY: "ABSENCE_EMPTY",
       SHIFT_EMPTY: "SHIFT_EMPTY",
+      UNAVAILABLE: "UNAVAILABLE",
       EMPTY: "EMPTY",
       UNAVAILABLE: "UNAVAILABLE",
       OCCUPANCY: "OCCUPANCY"
@@ -1687,6 +1717,11 @@
       
       if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
       FIELD_SCHEDULE[day] = {};
+      vacancies = [];
+      chains = [];
+      movementLog = [];
+      buildTeacherState(day);
+      calculateOriginalEnd(day);
       
       const origDay = ORIGINAL_SCHEDULE[day] || {};
       for (const cls of ALL_CLASSES) {
@@ -1892,7 +1927,7 @@
     // CORE FUNCTIONS
     // ============================================================
     function isTeacherFree(teacher, day, period) {
-      if (EXCLUDED_TEACHERS.includes(teacher)) return false;
+      if (isExcludedFromAll(teacher)) return false;
       if (!teacherState[teacher]) return false;
       if (isAbsent(teacher)) return false;
       for (const cls of ALL_CLASSES) {
@@ -2025,7 +2060,7 @@
         return nr;
       };
       const busyAt = (teacher, q, simRow) => {
-        if (EXCLUDED_TEACHERS.includes(teacher)) return true;
+        if (isExcludedFromAll(teacher)) return true;
         if (!teacherState[teacher]) return true;
         if (isAbsent(teacher)) return true;
         const sc = simRow[q];
@@ -2929,7 +2964,7 @@
       const day = document.getElementById("daySelect").value;
       const loads = dayLoads(day);
       for (const t of ALL_TEACHERS) {
-          if (EXCLUDED_TEACHERS.includes(t)) continue;
+          if (isExcludedFromAll(t)) continue;
         const count = loads[t] || 0;
         const chip = document.createElement("div");
         chip.className = "teacher-chip" + (count === 0 ? " zero-load" : "");
