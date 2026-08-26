@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>محرك تعويض الحصص المدرسي   </title>
+  <title>محرك تعويض الحصص المدرسي </title>
   <style>
     :root {
       --bg: #0f172a;
@@ -789,29 +789,31 @@
 <body>
   <div class="container">
     <div class="header">
-      <h1>⚙️ محرك تعويض الحصص المدرسي  </h1>
+      <h1>⚙️ محرك تعويض الحصص المدرسي </h1>
       <div class="school-name">مدرسة أبي بكر الصديق الأساسية للبنين</div>
       <div class="date-info" id="dateDisplay"></div>
     </div>
 
     <div class="controls no-print">
-      <div class="control-group">
-        <label>📅 اليوم</label>
-        <select class="day-select" id="daySelect">
-          <option value="">— اختر اليوم —</option>
-          <option value="الأحد">الأحد</option>
-          <option value="الاثنين">الاثنين</option>
-          <option value="الثلاثاء">الثلاثاء</option>
-          <option value="الأربعاء">الأربعاء</option>
-          <option value="الخميس">الخميس</option>
-        </select>
-      </div>
-      <div class="control-group">
-        <label>📆 التاريخ</label>
-        <div style="display:flex;gap:6px;align-items:center">
-          <select class="day-select" id="dateDay" style="flex:1;min-width:0"></select>
-          <select class="day-select" id="dateMonth" style="flex:1.4;min-width:0"></select>
-          <select class="day-select" id="dateYear" style="flex:1.2;min-width:0"></select>
+      <div style="display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap;">
+        <div class="control-group" style="flex:1; margin-bottom:0; min-width:150px;">
+          <label>📅 اليوم</label>
+          <select class="day-select" id="daySelect">
+            <option value="">— اختر اليوم —</option>
+            <option value="الأحد">الأحد</option>
+            <option value="الاثنين">الاثنين</option>
+            <option value="الثلاثاء">الثلاثاء</option>
+            <option value="الأربعاء">الأربعاء</option>
+            <option value="الخميس">الخميس</option>
+          </select>
+        </div>
+        <div class="control-group" style="flex:2; margin-bottom:0; min-width:250px;">
+          <label>📆 التاريخ</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select class="day-select" id="dateDay" style="flex:1;min-width:0"></select>
+            <select class="day-select" id="dateMonth" style="flex:1.4;min-width:0"></select>
+            <select class="day-select" id="dateYear" style="flex:1.2;min-width:0"></select>
+          </div>
         </div>
       </div>
       <div class="control-group">
@@ -820,12 +822,15 @@
           placeholder="🔍 ابحث عن اسم معلم للتصفية السريعة..." autocomplete="off">
         <div class="teacher-grid" id="teacherGrid"></div>
       </div>
-      <div style="display:flex;gap:8px;margin-top:4px">
-        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:1">
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:2;min-width:150px;">
           <span id="runBtnLabel">⚡ تطبيق التعويض</span>
         </button>
+        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1.5;min-width:150px;margin-top:0;">
+          🖨️ طباعة جدول اليوم
+        </button>
         <button class="btn btn-print" id="resetBtn" onclick="resetSelections()"
-          style="flex:0 0 auto;width:auto;padding:12px 16px" title="مسح كل اختيارات الغائبين">
+          style="flex:0 0 auto;width:auto;padding:12px 16px;margin-top:0;" title="مسح كل اختيارات الغائبين">
           🔄 إعادة تعيين
         </button>
       </div>
@@ -1654,6 +1659,52 @@
     let engineRunTime = "";
     let lastIntegrity = null;
     let chainSeq = 0;
+
+    // ============================================================
+    // CONTROLLER (UI + Engine Bridge)
+    // ============================================================
+    
+    function printOriginalSchedule() {
+      const day = document.getElementById("daySelect").value;
+      if (!day) { alert("اختر اليوم أولًا لطباعة جدوله"); return; }
+      
+      if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
+      FIELD_SCHEDULE[day] = {};
+      
+      const origDay = ORIGINAL_SCHEDULE[day] || {};
+      for (const cls of ALL_CLASSES) {
+        FIELD_SCHEDULE[day][cls] = {};
+        for (let p = 1; p <= 7; p++) {
+          const l = origDay[cls] && origDay[cls][p];
+          if (l && isRealLessonData(l.teacher, l.subject)) {
+            FIELD_SCHEDULE[day][cls][p] = {
+              teacher: l.teacher, subject: l.subject,
+              originalPeriod: p, currentPeriod: p,
+              status: LessonStatus.NORMAL, lessonId: null
+            };
+          } else {
+            FIELD_SCHEDULE[day][cls][p] = {
+              teacher: "", subject: "",
+              originalPeriod: p, currentPeriod: p,
+              status: LessonStatus.EMPTY, lessonId: null
+            };
+          }
+        }
+      }
+      
+      const date = getSelectedDate() || "";
+      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
+      
+      document.getElementById("attentionBanner").innerHTML = "";
+      document.getElementById("quickSummary").innerHTML = "";
+      renderScheduleTable(day);
+      document.getElementById("reportContainer").innerHTML = "";
+      document.getElementById("output").style.display = "block";
+      
+      setTimeout(function() {
+        window.print();
+      }, 300);
+    }
 
     // ============================================================
     // HELPERS
