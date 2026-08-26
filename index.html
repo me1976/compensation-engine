@@ -1695,6 +1695,10 @@
       const date = getSelectedDate() || "";
       document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
       
+      const headerTitle = document.querySelector('.header h1');
+      const originalTitle = headerTitle.innerHTML;
+      headerTitle.innerHTML = '📅 الجدول الدراسي اليومي الأصلي';
+      
       document.getElementById("attentionBanner").innerHTML = "";
       document.getElementById("quickSummary").innerHTML = "";
       renderScheduleTable(day);
@@ -1703,6 +1707,7 @@
       
       setTimeout(function() {
         window.print();
+        headerTitle.innerHTML = originalTitle;
       }, 300);
     }
 
