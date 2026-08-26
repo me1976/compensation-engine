@@ -3004,49 +3004,54 @@
       }
     }
 
+    function buildBusyMatrix(fieldDay, classes) {
+      const busy = {};
+      for (let p = 1; p <= 7; p++) busy[p] = {};
+      for (const cls of classes) {
+        const row = fieldDay && fieldDay[cls];
+        if (!row) continue;
+        for (let p = 1; p <= 7; p++) {
+          const l = row[p];
+          if (!isActiveLesson(l)) continue;
+          busy[p][l.teacher] = cls;
+        }
+      }
+      return busy;
+    }
+
     function runOccupancy() {
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("الرجاء اختيار اليوم أولاً"); return; }
-      
+      if (!ORIGINAL_SCHEDULE[day]) { alert("لا توجد بيانات لليوم المختار"); return; }
+
       const absentCountTemp = document.querySelectorAll(".teacher-chip.selected").length;
       if (absentCountTemp === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل"); return; }
-      
+
       const absent = [];
-      document.querySelectorAll(".teacher-chip.selected").forEach(chip => absent.push(chip.dataset.teacher));
-      
-      // Update global absentList so isAbsent() works
+      document.querySelectorAll(".teacher-chip.selected").forEach(chip => {
+        const t = chip.dataset.teacher;
+        if (isExcludedFromAll(t)) {
+          console.warn("تم تجاهل المعلم المستثنى:", t);
+          return;
+        }
+        absent.push(t);
+      });
+      if (absent.length === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل غير مستثنى"); return; }
+
       absentList = absent.slice();
 
-      // Calculate baseline weekly loads for all teachers
-      const weeklyLoads = {};
-      ALL_TEACHERS.forEach(t => weeklyLoads[t] = 0);
-      for (const d of Object.keys(ORIGINAL_SCHEDULE)) {
-        for (const cls of ALL_CLASSES) {
-          const row = ORIGINAL_SCHEDULE[d][cls];
-          if (!row) continue;
-          for (let p = 1; p <= 7; p++) {
-             const l = row[p];
-             if (l && isRealLessonData(l.teacher, l.subject)) {
-               weeklyLoads[l.teacher] = (weeklyLoads[l.teacher] || 0) + 1;
-             }
-          }
-        }
-      }
-
-      // Track how many occupancies each teacher gets today
-      const todayOccupancy = {};
-      ALL_TEACHERS.forEach(t => todayOccupancy[t] = 0);
-
-      // Reset FIELD_SCHEDULE for the day to original
       if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
-      FIELD_SCHEDULE[day] = deepClone(ORIGINAL_SCHEDULE[day]);
-      
+      FIELD_SCHEDULE[day] = {};
+      vacancies = [];
+      movementLog = [];
+      chains = [];
+      buildTeacherState(day);
+      calculateOriginalEnd(day);
+
       const origDay = ORIGINAL_SCHEDULE[day] || {};
       let occupancyCount = 0;
-      
-      const vacancies = [];
-      
-      // First pass: Fill normal lessons and collect vacancies
+      const uncovered = [];
+
       for (const cls of ALL_CLASSES) {
         if (!FIELD_SCHEDULE[day][cls]) FIELD_SCHEDULE[day][cls] = {};
         for (let p = 1; p <= 7; p++) {
@@ -3054,6 +3059,12 @@
           if (l && isRealLessonData(l.teacher, l.subject)) {
             if (absent.includes(l.teacher)) {
               vacancies.push({ class: cls, period: p, originalTeacher: l.teacher, subject: l.subject });
+              FIELD_SCHEDULE[day][cls][p] = {
+                teacher: "", subject: "",
+                originalPeriod: p, currentPeriod: p,
+                status: LessonStatus.ABSENCE_EMPTY,
+                absentTeacher: l.teacher, absentSubject: l.subject, lessonId: null
+              };
             } else {
               FIELD_SCHEDULE[day][cls][p] = {
                 teacher: l.teacher, subject: l.subject,
@@ -3063,75 +3074,116 @@
             }
           } else {
             FIELD_SCHEDULE[day][cls][p] = {
-              teacher: "", subject: "",
-              originalPeriod: p, currentPeriod: p,
+              teacher: "", subject: "", originalPeriod: p, currentPeriod: p,
               status: LessonStatus.EMPTY, lessonId: null
             };
           }
         }
       }
 
-      // Sort vacancies by period to process logically
-      vacancies.sort((a, b) => a.period - b.period);
-      
-      // Second pass: Assign substitutes dynamically
-      for (const vac of vacancies) {
-        const p = vac.period;
-        const cls = vac.class;
-        
-        let bestSub = "إدارة المدرسة";
-        let bestWeight = Infinity;
-        
-        for (const t of ALL_TEACHERS) {
-          if (absent.includes(t)) continue;
-          
-          // Is free?
-          let free = true;
-          for (const c of ALL_CLASSES) {
-            const origL = origDay[c] && origDay[c][p];
-            if (origL && origL.teacher === t) { free = false; break; }
-            const fieldL = FIELD_SCHEDULE[day][c] && FIELD_SCHEDULE[day][c][p];
-            if (fieldL && fieldL.teacher === t) { free = false; break; }
-          }
-          
-          if (free) {
-            // Calculate weight: weekly load + (today occupancies * 5) to strongly prefer teachers with 0 occupancies today
-            const weight = (weeklyLoads[t] || 0) + (todayOccupancy[t] * 5);
-            if (weight < bestWeight) {
-              bestWeight = weight;
-              bestSub = t;
+      const weeklyLoads = {};
+      for (const d of Object.keys(ORIGINAL_SCHEDULE)) {
+        for (const cls of ALL_CLASSES) {
+          const row = ORIGINAL_SCHEDULE[d][cls];
+          if (!row) continue;
+          for (let p = 1; p <= 7; p++) {
+            const l = row[p];
+            if (l && isRealLessonData(l.teacher, l.subject)) {
+              weeklyLoads[l.teacher] = (weeklyLoads[l.teacher] || 0) + 1;
             }
           }
         }
-        
-        if (bestSub !== "إدارة المدرسة") {
-          todayOccupancy[bestSub]++;
-        }
-        
-        FIELD_SCHEDULE[day][cls][p] = {
-          teacher: bestSub, subject: vac.subject,
-          originalPeriod: p, currentPeriod: p,
-          status: LessonStatus.OCCUPANCY,
-          originalTeacher: vac.originalTeacher,
-          lessonId: null
-        };
-        occupancyCount++;
       }
 
-      // Update date display
-      const date = getSelectedDate() || "";
-      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
+      const dailyTotal = {};
+      ALL_TEACHERS.forEach(t => dailyTotal[t] = 0);
+      for (const cls of ALL_CLASSES) {
+        for (let p = 1; p <= 7; p++) {
+          const c = FIELD_SCHEDULE[day][cls][p];
+          if (isActiveLesson(c)) dailyTotal[c.teacher] = (dailyTotal[c.teacher] || 0) + 1;
+        }
+      }
 
-      // Show summary banner
+      const todayOccupancy = {};
+      ALL_TEACHERS.forEach(t => todayOccupancy[t] = 0);
+      const cumLoad = ALL_TEACHERS.reduce((acc, t) => (acc[t] = FairnessLedger.get(t), acc), {});
+      const assignedToday = [];
+
+      vacancies.sort((a, b) => a.period - b.period);
+
+      for (const vac of vacancies) {
+        const p = vac.period;
+        const cls = vac.class;
+
+        const busy = buildBusyMatrix(FIELD_SCHEDULE[day], ALL_CLASSES);
+
+        let bestSub = null;
+        let bestScore = -Infinity;
+
+        for (const t of ALL_TEACHERS) {
+          if (isExemptFromOccupancy(t)) continue;
+          if (absent.includes(t)) continue;
+          if (busy[p][t]) continue;
+          
+          if ((dailyTotal[t] || 0) >= ENGINE_CONFIG.MAX_DAILY_TOTAL) continue;
+          if ((todayOccupancy[t] || 0) >= ENGINE_CONFIG.MAX_OCCUPANCY_PER_DAY) continue;
+
+          const fairnessPenalty = (cumLoad[t] || 0) * 2;
+          const todayPenalty = (todayOccupancy[t] || 0) * 10;
+          const weeklyPenalty = (weeklyLoads[t] || 0);
+
+          const score = -(fairnessPenalty + todayPenalty + weeklyPenalty);
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestSub = t;
+          }
+        }
+
+        if (bestSub) {
+          todayOccupancy[bestSub] = (todayOccupancy[bestSub] || 0) + 1;
+          dailyTotal[bestSub] = (dailyTotal[bestSub] || 0) + 1;
+          assignedToday.push(bestSub);
+          occupancyCount++;
+
+          FIELD_SCHEDULE[day][cls][p] = {
+            teacher: bestSub, subject: vac.subject,
+            originalPeriod: p, currentPeriod: p,
+            status: LessonStatus.OCCUPANCY,
+            originalTeacher: vac.originalTeacher, lessonId: null
+          };
+        } else {
+          uncovered.push(vac);
+          FIELD_SCHEDULE[day][cls][p] = {
+            teacher: "", subject: vac.subject,
+            originalPeriod: p, currentPeriod: p,
+            status: LessonStatus.UNAVAILABLE,
+            absentTeacher: vac.originalTeacher, lessonId: null
+          };
+        }
+      }
+
+      if (assignedToday.length) {
+        const d = getSelectedDate();
+        if (d) FairnessLedger.add(d, assignedToday);
+      }
+
       const banner = document.getElementById("attentionBanner");
-      banner.innerHTML = `<div style="background:var(--success-light, #dcfce7); color:var(--success, #16a34a); padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid var(--success, #16a34a); font-weight:bold; text-align:center;">✅ تم إشغال ${occupancyCount} حصة بنجاح وتوزيعها بناءً على الأوزان والنصاب.</div>`;
+      if (uncovered.length) {
+        banner.innerHTML =
+          '<div class="attention-banner">⚠️ تم تغطية ' + occupancyCount +
+          ' حصة. بقيت <strong>' + uncovered.length +
+          '</strong> حصة بلا معلم متاح (نقص بالتوظيف) — تحتاج قرارًا إداريًا: ' +
+          uncovered.map(u => esc(u.class) + ' ح' + u.period).join("، ") + '</div>';
+      } else {
+        banner.innerHTML =
+          '<div class="attention-banner" style="background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.45);color:var(--success)">✅ تم إشغال ' +
+          occupancyCount + ' حصة بتوزيع عادل بنجاح.</div>';
+      }
 
-      // Clear report container
       document.getElementById("quickSummary").innerHTML = "";
       renderScheduleTable(day);
       document.getElementById("reportContainer").innerHTML = "";
-      
-      // Show output
       document.getElementById("output").style.display = "block";
     }
 
