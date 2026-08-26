@@ -248,9 +248,41 @@
     .schedule-table th,
     .schedule-table td {
       padding: 6px 4px;
-      text-align: center;
       border: 1px solid var(--border);
-      white-space: nowrap;
+      text-align: center;
+      width: 12.5%;
+      height: 48px;
+    }
+
+    .cell-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 100%;
+      min-height: 42px;
+      padding: 4px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .shifted-cell {
+      background: rgba(124, 58, 237, 0.2);
+      border: 1px solid var(--shifted);
+    }
+
+    .occupancy-cell {
+      background: rgba(22, 163, 74, 0.15);
+      border: 1px solid var(--success);
+      position: relative;
+    }
+    
+    .occupancy-cell::before {
+      content: '👤';
+      position: absolute;
+      top: 2px;
+      right: 4px;
+      font-size: 0.6em;
+      opacity: 0.8;
     }
 
     .schedule-table thead th {
@@ -823,10 +855,13 @@
         <div class="teacher-grid" id="teacherGrid"></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
-        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:2;min-width:150px;">
+        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:1.5;min-width:120px;">
           <span id="runBtnLabel">⚡ تطبيق التعويض</span>
         </button>
-        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1.5;min-width:150px;margin-top:0;">
+        <button class="btn btn-primary" id="occupancyBtn" onclick="runOccupancy()" style="flex:1.5;min-width:120px; background:linear-gradient(135deg, var(--success), #10b981); box-shadow:0 4px 15px rgba(16,185,129,0.3);">
+          <span>👤 إشغال الحصص</span>
+        </button>
+        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1;min-width:120px;margin-top:0;">
           🖨️ طباعة جدول اليوم
         </button>
         <button class="btn btn-print" id="resetBtn" onclick="resetSelections()"
@@ -843,6 +878,9 @@
       <div class="legend no-print" id="legendBar">
         <div class="legend-item">
           <div class="legend-dot" style="background:var(--shifted)"></div> حصة منقولة
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--success)"></div> إشغال بديل
         </div>
         <div class="legend-item">
           <div class="legend-dot" style="background:var(--absence)"></div> غياب
@@ -1640,7 +1678,8 @@
       ABSENCE_EMPTY: "ABSENCE_EMPTY",
       SHIFT_EMPTY: "SHIFT_EMPTY",
       EMPTY: "EMPTY",
-      UNAVAILABLE: "UNAVAILABLE"
+      UNAVAILABLE: "UNAVAILABLE",
+      OCCUPANCY: "OCCUPANCY"
     };
 
     // ============================================================
@@ -1735,7 +1774,7 @@
       return !isBlankToken(teacher) && !isBlankToken(subject);
     }
 
-    function isLessonStatus(st) { return st === LessonStatus.NORMAL || st === LessonStatus.SHIFTED; }
+    function isLessonStatus(st) { return st === LessonStatus.NORMAL || st === LessonStatus.SHIFTED || st === LessonStatus.OCCUPANCY; }
 
     function isGapStatus(st) {
       return st === LessonStatus.ABSENCE_EMPTY || st === LessonStatus.SHIFT_EMPTY || st === LessonStatus.EMPTY;
@@ -2949,6 +2988,79 @@
       }
     }
 
+    function runOccupancy() {
+      const day = document.getElementById("daySelect").value;
+      if (!day) { alert("الرجاء اختيار اليوم أولاً"); return; }
+      
+      const absentCount = selectedAbsentees.size;
+      if (absentCount === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل"); return; }
+
+      // Reset FIELD_SCHEDULE for the day to original
+      if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
+      FIELD_SCHEDULE[day] = deepClone(ORIGINAL_SCHEDULE[day]);
+      
+      const origDay = ORIGINAL_SCHEDULE[day] || {};
+      let occupancyCount = 0;
+      
+      for (const cls of ALL_CLASSES) {
+        if (!FIELD_SCHEDULE[day][cls]) FIELD_SCHEDULE[day][cls] = {};
+        for (let p = 1; p <= 7; p++) {
+          const l = origDay[cls] && origDay[cls][p];
+          if (l && isRealLessonData(l.teacher, l.subject)) {
+            if (selectedAbsentees.has(l.teacher)) {
+              let sub = "إدارة المدرسة";
+              const periodName = PERIOD_NAMES[p];
+              
+              if (ashghalData && ashghalData[day] && ashghalData[day][periodName] && ashghalData[day][periodName][cls]) {
+                const record = ashghalData[day][periodName][cls];
+                if (record.sub1 && !selectedAbsentees.has(record.sub1)) sub = record.sub1;
+                else if (record.sub2 && !selectedAbsentees.has(record.sub2)) sub = record.sub2;
+                else if (record.sub3 && !selectedAbsentees.has(record.sub3)) sub = record.sub3;
+              }
+              
+              FIELD_SCHEDULE[day][cls][p] = {
+                teacher: sub,
+                subject: l.subject,
+                originalPeriod: p, currentPeriod: p,
+                status: LessonStatus.OCCUPANCY,
+                originalTeacher: l.teacher,
+                lessonId: null
+              };
+              occupancyCount++;
+            } else {
+              FIELD_SCHEDULE[day][cls][p] = {
+                teacher: l.teacher, subject: l.subject,
+                originalPeriod: p, currentPeriod: p,
+                status: LessonStatus.NORMAL, lessonId: null
+              };
+            }
+          } else {
+            FIELD_SCHEDULE[day][cls][p] = {
+              teacher: "", subject: "",
+              originalPeriod: p, currentPeriod: p,
+              status: LessonStatus.EMPTY, lessonId: null
+            };
+          }
+        }
+      }
+
+      // Update date display
+      const date = getSelectedDate() || "";
+      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
+
+      // Show summary banner
+      const banner = document.getElementById("attentionBanner");
+      banner.innerHTML = `<div style="background:var(--success-light, #dcfce7); color:var(--success, #16a34a); padding:10px; border-radius:8px; margin-bottom:12px; border:1px solid var(--success, #16a34a); font-weight:bold; text-align:center;">✅ تم إشغال ${occupancyCount} حصة بنجاح عبر نظام الإشغال الفوري.</div>`;
+
+      // Clear report container
+      document.getElementById("quickSummary").innerHTML = "";
+      renderScheduleTable(day);
+      document.getElementById("reportContainer").innerHTML = "";
+      
+      // Show output
+      document.getElementById("output").style.display = "block";
+    }
+
     function runCompensation() {
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("اختر اليوم أولًا"); return; }
@@ -3026,6 +3138,11 @@
             cellClass = "cell-normal" + (isFallbackTarget ? " cell-fallback" : "");
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
               '</span><span class="teacher-name">' + esc(lesson.teacher) + "</span></div>";
+          } else if (lesson.status === LessonStatus.OCCUPANCY) {
+            cellClass = "occupancy-cell" + (isFallbackTarget ? " cell-fallback" : "");
+            content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
+              '</span><span class="teacher-name" style="color:var(--success);font-weight:bold;">' + esc(lesson.teacher) + 
+              '</span><span style="font-size:0.7em;color:var(--text2)">بدل: ' + esc(lesson.originalTeacher) + '</span></div>';
           } else if (lesson.status === LessonStatus.SHIFTED) {
             const isCross = movementLog.some(m => m.movementType === "CROSS_CLASS_CASCADE" && m.targetClass === cls && m.toPeriod === p);
             const isRipple = movementLog.some(m => m.movementType === "RIPPLE_SWAP" && m.targetClass === cls && m.toPeriod === p);
