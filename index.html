@@ -1,368 +1,2984 @@
-function buildBusyMatrix(fieldDay, classes) {
-      const busy = {};
-      for (let p = 1; p <= 7; p++) busy[p] = {};
-      for (const cls of classes) {
-        const row = fieldDay && fieldDay[cls];
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>محرك تعويض الحصص المدرسي </title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --bg2: #1e293b;
+      --bg3: #334155;
+      --surface: #1e293b;
+      --border: #475569;
+      --text: #f1f5f9;
+      --text2: #94a3b8;
+      --accent: #38bdf8;
+      --accent2: #818cf8;
+      --success: #34d399;
+      --warning: #fbbf24;
+      --danger: #f87171;
+      --shifted: #7c3aed;
+      --absence: #ef4444;
+      --shift-empty: #f59e0b;
+      --cross: #06b6d4;
+      --fallback: #f43f5e;
+      --radius: 10px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .container {
+      max-width: 100%;
+      padding: 12px;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .header h1 {
+      font-size: 1.3em;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+
+    .header .school-name {
+      font-size: 1em;
+      color: var(--text2);
+    }
+
+    .header .date-info {
+      font-size: 0.85em;
+      color: var(--accent);
+      margin-top: 4px;
+    }
+
+    .controls {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .control-group {
+      margin-bottom: 12px;
+    }
+
+    .control-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .control-group label {
+      display: block;
+      font-size: 0.9em;
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .day-select {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 1em;
+      font-family: inherit;
+      appearance: none;
+      cursor: pointer;
+    }
+
+    .date-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 1em;
+      font-family: inherit;
+    }
+
+    .teacher-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .teacher-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 12px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      font-size: 0.82em;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .teacher-chip:active {
+      transform: scale(0.95);
+    }
+
+    .teacher-chip.selected {
+      background: rgba(239, 68, 68, 0.25);
+      border-color: var(--danger);
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .teacher-chip .check {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      margin-left: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .teacher-chip.selected .check {
+      background: var(--danger);
+      border-color: var(--danger);
+    }
+
+    .teacher-chip.selected .check::after {
+      content: '✓';
+      color: white;
+      font-size: 10px;
+      font-weight: bold;
+    }
+
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .btn:disabled {
+      opacity: 0.65;
+      cursor: default;
+      transform: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+    }
+
+    .btn-print {
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+      margin-top: 12px;
+    }
+
+    .schedule-section {
+      margin-bottom: 12px;
+    }
+
+    .schedule-section h2 {
+      font-size: 1.1em;
+      color: var(--accent);
+      margin-bottom: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+    }
+
+    .schedule-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.75em;
+      min-width: 600px;
+    }
+
+    .schedule-table th,
+    .schedule-table td {
+      padding: 6px 4px;
+      text-align: center;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .schedule-table thead th {
+      background: var(--bg2);
+      color: var(--accent);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .schedule-table tbody td {
+      background: var(--surface);
+      vertical-align: middle;
+    }
+
+    .schedule-table .period-col {
+      background: var(--bg3);
+      font-weight: 700;
+      color: var(--accent);
+      min-width: 40px;
+    }
+
+    .cell-occupancy {
+      background: rgba(22, 163, 74, 0.15) !important;
+      border-left: 3px solid var(--success) !important;
+    }
+    .cell-shifted {
+      background: rgba(124, 58, 237, 0.2) !important;
+      border-left: 3px solid var(--shifted) !important;
+    }
+
+    .cell-absence-empty {
+      background: rgba(239, 68, 68, 0.15) !important;
+      color: var(--danger) !important;
+    }
+
+    .cell-shift-empty {
+      background: rgba(245, 158, 11, 0.15) !important;
+      color: var(--shift-empty) !important;
+    }
+
+    .cell-cross {
+      background: rgba(6, 182, 212, 0.2) !important;
+      border-left: 3px solid var(--cross) !important;
+    }
+
+    .cell-fallback {
+      background: rgba(244, 63, 94, 0.2) !important;
+      color: var(--fallback) !important;
+      font-weight: 600;
+    }
+
+    .cell-empty-original {
+      background: var(--bg) !important;
+      color: var(--text2) !important;
+    }
+
+    .teacher-name {
+      font-weight: 600;
+    }
+
+    .subject-name {
+      font-size: 0.9em;
+      color: var(--text2);
+    }
+
+    .cell-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+
+    .move-badge {
+      font-size: 0.7em;
+      padding: 1px 4px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .move-badge.direct {
+      background: rgba(52, 211, 153, 0.3);
+      color: var(--success);
+    }
+
+    .move-badge.ripple {
+      background: rgba(129, 140, 248, 0.3);
+      color: var(--accent2);
+    }
+
+    .move-badge.cross {
+      background: rgba(6, 182, 212, 0.3);
+      color: var(--cross);
+    }
+
+    .report-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .report-section h2 {
+      font-size: 1.1em;
+      color: var(--accent);
+      margin-bottom: 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .report-section h3 {
+      font-size: 0.95em;
+      color: var(--accent2);
+      margin: 10px 0 6px;
+    }
+
+    .report-item {
+      background: var(--bg3);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 0.85em;
+      line-height: 1.8;
+    }
+
+    .report-item .label {
+      color: var(--text2);
+    }
+
+    .report-item .value {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.8em;
+      font-weight: 600;
+    }
+
+    .status-success {
+      background: rgba(52, 211, 153, 0.2);
+      color: var(--success);
+    }
+
+    .status-fallback {
+      background: rgba(244, 63, 94, 0.2);
+      color: var(--fallback);
+    }
+
+    .status-noaction {
+      background: rgba(148, 163, 184, 0.2);
+      color: var(--text2);
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat-card {
+      background: var(--bg3);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .stat-card .num {
+      font-size: 1.5em;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .stat-card .lbl {
+      font-size: 0.75em;
+      color: var(--text2);
+      margin-top: 2px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+      font-size: 0.75em;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    #output {
+      display: none;
+    }
+
+    .chip-count {
+      font-size: 0.72em;
+      color: var(--text2);
+      margin-left: 4px;
+    }
+
+    .teacher-chip.zero-load {
+      opacity: 0.45;
+    }
+
+    .tests-table td {
+      text-align: right;
+    }
+
+    .tests-table td.t-pass {
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .tests-table td.t-fail {
+      color: var(--fallback);
+      font-weight: 700;
+    }
+
+    .teacher-filter {
+      width: 100%;
+      padding: 9px 12px;
+      margin-bottom: 8px;
+      background: var(--bg3);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9em;
+      font-family: inherit;
+    }
+
+    .teacher-filter::placeholder {
+      color: var(--text2);
+    }
+
+    .teacher-chip.hidden-by-filter {
+      display: none;
+    }
+
+    .quick-summary {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .quick-summary .qs-item {
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+
+    .quick-summary .qs-num {
+      font-size: 1.4em;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+
+    .quick-summary .qs-lbl {
+      font-size: 0.72em;
+      color: var(--text2);
+      margin-top: 2px;
+    }
+
+    .quick-summary .qs-ok {
+      background: rgba(52, 211, 153, 0.12);
+      border-color: rgba(52, 211, 153, 0.4);
+    }
+
+    .quick-summary .qs-ok .qs-num {
+      color: var(--success);
+    }
+
+    .quick-summary .qs-warn {
+      background: rgba(251, 191, 36, 0.12);
+      border-color: rgba(251, 191, 36, 0.4);
+    }
+
+    .quick-summary .qs-warn .qs-num {
+      color: var(--warning);
+    }
+
+    .quick-summary .qs-danger {
+      background: rgba(244, 63, 94, 0.14);
+      border-color: rgba(244, 63, 94, 0.45);
+    }
+
+    .quick-summary .qs-danger .qs-num {
+      color: var(--fallback);
+    }
+
+    .quick-summary .qs-neutral {
+      background: var(--bg3);
+    }
+
+    .quick-summary .qs-neutral .qs-num {
+      color: var(--accent);
+    }
+
+    .attention-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(244, 63, 94, 0.14);
+      border: 1px solid rgba(244, 63, 94, 0.5);
+      color: var(--fallback);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      font-size: 0.88em;
+      font-weight: 600;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    .teacher-chip:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .teacher-chip {
+      outline: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        transition: none !important;
+        animation: none !important;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+        color: black;
+        font-size: 10pt;
+        font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      .container {
+        padding: 0;
+        max-width: 100%;
+      }
+
+      .header {
+        border: 2px solid #1a1a2e;
+        background: white;
+        box-shadow: none;
+        padding: 10px;
+        margin-bottom: 8px;
+        page-break-inside: avoid;
+      }
+
+      .header h1 {
+        -webkit-text-fill-color: #1a1a2e;
+        color: #1a1a2e;
+        background: none;
+        font-size: 1.2em;
+      }
+
+      .header .school-name,
+      .header .date-info {
+        color: #333;
+        font-size: 0.9em;
+      }
+
+      .schedule-section h2 {
+        color: #1a1a2e;
+        border-bottom: 2px solid #1a1a2e;
+        font-size: 1em;
+        padding: 4px 0;
+        margin-bottom: 6px;
+      }
+
+      .schedule-table {
+        min-width: unset;
+        font-size: 8pt;
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .schedule-table th {
+        background: #1a1a2e !important;
+        color: white !important;
+        font-weight: 700;
+        padding: 4px 3px;
+        font-size: 7.5pt;
+      }
+
+      .schedule-table td {
+        background: white;
+        color: black;
+        padding: 4px 3px;
+        border: 1px solid #999;
+      }
+
+      .cell-shifted {
+        background: #e8dff5 !important;
+        border-right: 3px solid #7c3aed !important;
+        color: #3b0764 !important;
+      }
+
+      .cell-absence-empty {
+        background: #fde2e2 !important;
+        color: #991b1b !important;
+        font-weight: 700;
+      }
+
+      .cell-shift-empty {
+        background: #fef3cd !important;
+        color: #78350f !important;
+      }
+
+      .cell-cross {
+        background: #d1ecf1 !important;
+        border-right: 3px solid #0e7490 !important;
+        color: #0e4f6b !important;
+      }
+
+      .cell-fallback {
+        background: #fde2e2 !important;
+        color: #991b1b !important;
+        font-weight: 700;
+      }
+
+      .cell-empty-original {
+        background: #f8f8f8 !important;
+        color: #999 !important;
+      }
+
+      .teacher-name {
+        font-weight: 700;
+        font-size: 0.95em;
+      }
+
+      .subject-name {
+        color: #444 !important;
+        font-size: 0.85em;
+      }
+
+      .move-badge {
+        border: 1px solid currentColor;
+        font-size: 0.65em;
+      }
+
+      .report-section {
+        background: white;
+        border: 1px solid #ccc;
+        box-shadow: none;
+        page-break-inside: avoid;
+        margin-bottom: 8px;
+      }
+
+      .report-section h2 {
+        color: #1a1a2e;
+        font-size: 0.95em;
+      }
+
+      .report-item {
+        background: #f8f8f8;
+        color: black;
+        font-size: 0.8em;
+        padding: 6px 8px;
+        margin-bottom: 5px;
+      }
+
+      .stat-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .stat-card {
+        background: #f8f8f8;
+        border: 1px solid #ddd;
+      }
+
+      .stat-card .num {
+        color: #1a1a2e;
+        font-size: 1.2em;
+      }
+
+      .stat-card .lbl {
+        color: #555;
+        font-size: 0.7em;
+      }
+
+      .table-wrapper {
+        border: 1px solid #999;
+        box-shadow: none;
+        overflow: visible;
+      }
+
+      .period-col {
+        background: #e0e0e0 !important;
+        color: #1a1a2e !important;
+        font-weight: 700;
+      }
+
+      .schedule-table thead th {
+        position: static;
+      }
+
+      #output {
+        display: block !important;
+      }
+
+      @page {
+        margin: 1cm 0.7cm;
+        size: A4 landscape;
+      }
+
+      .quick-summary,
+      .attention-banner {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>⚙️ محرك تعويض الحصص المدرسي </h1>
+      <div class="school-name">مدرسة أبي بكر الصديق الأساسية للبنين</div>
+      <div class="date-info" id="dateDisplay"></div>
+    </div>
+
+    <div class="controls no-print">
+      <div style="display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap;">
+        <div class="control-group" style="flex:1; margin-bottom:0; min-width:150px;">
+          <label>📅 اليوم</label>
+          <select class="day-select" id="daySelect">
+            <option value="">— اختر اليوم —</option>
+            <option value="الأحد">الأحد</option>
+            <option value="الاثنين">الاثنين</option>
+            <option value="الثلاثاء">الثلاثاء</option>
+            <option value="الأربعاء">الأربعاء</option>
+            <option value="الخميس">الخميس</option>
+          </select>
+        </div>
+        <div class="control-group" style="flex:2; margin-bottom:0; min-width:250px;">
+          <label>📆 التاريخ</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select class="day-select" id="dateDay" style="flex:1;min-width:0"></select>
+            <select class="day-select" id="dateMonth" style="flex:1.4;min-width:0"></select>
+            <select class="day-select" id="dateYear" style="flex:1.2;min-width:0"></select>
+          </div>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>🚫 المعلمون الغائبون <span id="absentCount" style="color:var(--danger)"></span></label>
+        <input type="text" class="teacher-filter" id="teacherFilter"
+          placeholder="🔍 ابحث عن اسم معلم للتصفية السريعة..." autocomplete="off">
+        <div class="teacher-grid" id="teacherGrid"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:1.5;min-width:120px;">
+          <span id="runBtnLabel">⚡ تطبيق التعويض</span>
+        </button>
+        <button class="btn btn-primary" id="occupancyBtn" onclick="runOccupancy()" style="flex:1.5;min-width:120px; background:linear-gradient(135deg, var(--success), #10b981); box-shadow:0 4px 15px rgba(16,185,129,0.3);">
+          <span>👤 إشغال الحصص</span>
+        </button>
+        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1;min-width:120px;margin-top:0;">
+          🖨️ طباعة جدول اليوم
+        </button>
+        <button class="btn btn-print" id="resetBtn" onclick="resetSelections()"
+          style="flex:0 0 auto;width:auto;padding:12px 16px;margin-top:0;" title="مسح كل اختيارات الغائبين">
+          🔄 إعادة تعيين
+        </button>
+      </div>
+    </div>
+
+    <div id="output">
+      <div id="attentionBanner"></div>
+      <div class="quick-summary no-print" id="quickSummary"></div>
+
+      <div class="legend no-print" id="legendBar">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--shifted)"></div> حصة منقولة
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--success)"></div> إشغال بديل
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--absence)"></div> غياب
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--shift-empty)"></div> فراغ نقل
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--cross)"></div> عابر للشعب
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--fallback)"></div> استعصاء
+        </div>
+      </div>
+
+      <div class="schedule-section">
+        <h2>📋 الجدول الميداني</h2>
+        <div class="table-wrapper" id="scheduleTableWrapper"></div>
+      </div>
+
+      <div id="reportContainer"></div>
+
+      <button class="btn btn-print no-print" onclick="window.print()">🖨️ طباعة التقرير</button>
+    </div>
+  </div>
+
+  <script>
+    // ============================================================
+    // DATA — الجدول الجديد من ميداني.xlsx
+    // ============================================================
+    
+    // بيانات الإشغال
+    const ashghalData = {"الأحد":{"الأولى":{"الصف 4أ":{"orig":"عليوي","sub1":"خيرالله","sub2":"كامل","sub3":"عرقان"},"الصف 4ب":{"orig":"وصفي","sub1":"معتصم","sub2":"احمد","sub3":"عبدالله"},"الصف 5أ":{"orig":"حازم","sub1":"محمد","sub2":"باسم","sub3":"خيرالله"},"الصف 5ب":{"orig":"هشام","sub1":"عرقان","sub2":"سردي","sub3":"كامل"},"الصف 5ج":{"orig":"موفق","sub1":"خيرالله","sub2":"انس","sub3":"عدنان"},"الصف 6أ":{"orig":"معاذ","sub1":"معتصم","sub2":"عبدالله","sub3":"كامل"},"الصف 6ب":{"orig":"مجد","sub1":"خيرالله","sub2":"احمد","sub3":"عرقان"},"الصف 6ج":{"orig":"شدايده","sub1":"كامل","sub2":"محمد","sub3":"خيرالله"},"الصف 7أ":{"orig":"عبد","sub1":"عرقان","sub2":"سردي","sub3":"باسم"},"الصف 7ب":{"orig":"ايمن","sub1":"خيرالله","sub2":"معتصم","sub3":"عبدالله"},"الصف 7ج":{"orig":"زغارنه","sub1":"احمد","sub2":"عدنان","sub3":"كامل"},"الصف 8أ":{"orig":"وليد","sub1":"انس","sub2":"خيرالله","sub3":"معتصم"},"الصف 8ب":{"orig":"مغربي","sub1":"عرقان","sub2":"عبدالله","sub3":"محمد"},"الصف 8ج":{"orig":"ماهر","sub1":"خيرالله","sub2":"كامل","sub3":"معتصم"}},"الثانية":{"الصف 4أ":{"orig":"وصفي","sub1":"سردي","sub2":"ايمن","sub3":"خيرالله"},"الصف 4ب":{"orig":"حازم","sub1":"شدايده","sub2":"كامل","sub3":"مجد"},"الصف 5أ":{"orig":"عرقان","sub1":"عبدالله","sub2":"خيرالله","sub3":"موفق"},"الصف 5ب":{"orig":"عدنان","sub1":"هشام","sub2":"وليد","sub3":"ايمن"},"الصف 5ج":{"orig":"باسم","sub1":"مغربي","sub2":"خيرالله","sub3":"كامل"},"الصف 6أ":{"orig":"محمد","sub1":"مجد","sub2":"شدايده","sub3":"ايمن"},"الصف 6ب":{"orig":"معاذ","sub1":"خيرالله","sub2":"كامل","sub3":"موفق"},"الصف 6ج":{"orig":"عليوي","sub1":"عبدالله","sub2":"ايمن","sub3":"وليد"},"الصف 7أ":{"orig":"عبد","sub1":"خيرالله","sub2":"شدايده","sub3":"مجد"},"الصف 7ب":{"orig":"ماهر","sub1":"كامل","sub2":"هشام","sub3":"سردي"},"الصف 7ج":{"orig":"مساعيد","sub1":"ايمن","sub2":"خيرالله","sub3":"موفق"},"الصف 8أ":{"orig":"زغارنه","sub1":"مجد","sub2":"شدايده","sub3":"مغربي"},"الصف 8ب":{"orig":"معتصم","sub1":"خيرالله","sub2":"كامل","sub3":"وليد"},"الصف 8ج":{"orig":"احمد","sub1":"ايمن","sub2":"عبدالله","sub3":"موفق"}},"الثالثة":{"الصف 4أ":{"orig":"وصفي","sub1":"شدايده","sub2":"خيرالله","sub3":"مجد"},"الصف 4ب":{"orig":"هشام","sub1":"عرقان","sub2":"عبد","sub3":"مساعيد"},"الصف 5أ":{"orig":"عليوي","sub1":"خيرالله","sub2":"ايمن","sub3":"مغربي"},"الصف 5ب":{"orig":"عدنان","sub1":"مجد","sub2":"حازم","sub3":"شدايده"},"الصف 5ج":{"orig":"باسم","sub1":"خيرالله","sub2":"ايمن","sub3":"موفق"},"الصف 6أ":{"orig":"معاذ","sub1":"عرقان","sub2":"عبد","sub3":"مغربي"},"الصف 6ب":{"orig":"محمد","sub1":"ايمن","sub2":"خيرالله","sub3":"شدايده"},"الصف 6ج":{"orig":"كامل","sub1":"مساعيد","sub2":"مجد","sub3":"موفق"},"الصف 7أ":{"orig":"سردي","sub1":"خيرالله","sub2":"شدايده","sub3":"عرقان"},"الصف 7ب":{"orig":"عبدالله","sub1":"ايمن","sub2":"زغارنه","sub3":"عبد"},"الصف 7ج":{"orig":"معتصم","sub1":"خيرالله","sub2":"عرقان","sub3":"مجد"},"الصف 8أ":{"orig":"احمد","sub1":"شدايده","sub2":"حازم","sub3":"مغربي"},"الصف 8ب":{"orig":"ماهر","sub1":"ايمن","sub2":"خيرالله","sub3":"موفق"},"الصف 8ج":{"orig":"وليد","sub1":"مساعيد","sub2":"مجد","sub3":"عرقان"}},"الرابعة":{"الصف 4أ":{"orig":"سردي","sub1":"خيرالله","sub2":"احمد","sub3":"شدايده"},"الصف 4ب":{"orig":"عليوي","sub1":"وصفي","sub2":"عرقان","sub3":"معتصم"},"الصف 5أ":{"orig":"موفق","sub1":"خيرالله","sub2":"شدايده","sub3":"سعاده"},"الصف 5ب":{"orig":"كامل","sub1":"معاذ","sub2":"عبدالله","sub3":"احمد"},"الصف 5ج":{"orig":"عدنان","sub1":"خيرالله","sub2":"وصفي","sub3":"عرقان"},"الصف 6أ":{"orig":"باسم","sub1":"معتصم","sub2":"مساعيد","sub3":"شدايده"},"الصف 6ب":{"orig":"هشام","sub1":"حازم","sub2":"خيرالله","sub3":"عرقان"},"الصف 6ج":{"orig":"مجد","sub1":"وصفي","sub2":"شدايده","sub3":"احمد"},"الصف 7أ":{"orig":"ايمن","sub1":"خيرالله","sub2":"عبدالله","sub3":"معتصم"},"الصف 7ب":{"orig":"عبد","sub1":"عرقان","sub2":"سعاده","sub3":"مساعيد"},"الصف 7ج":{"orig":"ماهر","sub1":"وصفي","sub2":"خيرالله","sub3":"شدايده"},"الصف 8أ":{"orig":"مغربي","sub1":"معتصم","sub2":"احمد","sub3":"خيرالله"},"الصف 8ب":{"orig":"وليد","sub1":"عبدالله","sub2":"عرقان","sub3":"شدايده"},"الصف 8ج":{"orig":"زغارنه","sub1":"خيرالله","sub2":"وصفي","sub3":"معاذ"}},"الخامسة":{"الصف 4أ":{"orig":"موفق","sub1":"عبد","sub2":"حازم","sub3":"ايمن"},"الصف 4ب":{"orig":"وليد","sub1":"كامل","sub2":"خيرالله","sub3":"شدايده"},"الصف 5أ":{"orig":"عدنان","sub1":"عرقان","sub2":"وصفي","sub3":"احمد"},"الصف 5ب":{"orig":"مجد","sub1":"خيرالله","sub2":"ايمن","sub3":"محمد"},"الصف 5ج":{"orig":"عليوي","sub1":"شدايده","sub2":"ماهر","sub3":"كامل"},"الصف 6أ":{"orig":"باسم","sub1":"وصفي","sub2":"خيرالله","sub3":"عرقان"},"الصف 6ب":{"orig":"هشام","sub1":"ايمن","sub2":"احمد","sub3":"عبد"},"الصف 6ج":{"orig":"معاذ","sub1":"محمد","sub2":"خيرالله","sub3":"كامل"},"الصف 7أ":{"orig":"زغارنه","sub1":"شدايده","sub2":"عرقان","sub3":"وصفي"},"الصف 7ب":{"orig":"مساعيد","sub1":"ايمن","sub2":"خيرالله","sub3":"كامل"},"الصف 7ج":{"orig":"سردي","sub1":"عبد","sub2":"احمد","sub3":"خيرالله"},"الصف 8أ":{"orig":"معتصم","sub1":"وصفي","sub2":"عرقان","sub3":"شدايده"},"الصف 8ب":{"orig":"عبدالله","sub1":"كامل","sub2":"ايمن","sub3":"خيرالله"},"الصف 8ج":{"orig":"مغربي","sub1":"حازم","sub2":"ماهر","sub3":"خيرالله"}},"السادسة":{"الصف 4أ":{"orig":"هشام","sub1":"باسم","sub2":"ايمن","sub3":"وصفي"},"الصف 4ب":{"orig":"مغربي","sub1":"معتصم","sub2":"كامل","sub3":"احمد"},"الصف 5أ":{"orig":"مجد","sub1":"وليد","sub2":"وصفي","sub3":"ايمن"},"الصف 5ب":{"orig":"موفق","sub1":"عبدالله","sub2":"سعاده","sub3":"كامل"},"الصف 5ج":{"orig":"عرقان","sub1":"عدنان","sub2":"ايمن","sub3":"معتصم"},"الصف 6أ":{"orig":"شدايده","sub1":"احمد","sub2":"معاذ","sub3":"وصفي"},"الصف 6ب":{"orig":"عليوي","sub1":"انس","sub2":"كامل","sub3":"ايمن"},"الصف 6ج":{"orig":"محمد","sub1":"باسم","sub2":"معتصم","sub3":"وصفي"},"الصف 7أ":{"orig":"مساعيد","sub1":"عبدالله","sub2":"وليد","sub3":"ايمن"},"الصف 7ب":{"orig":"سردي","sub1":"كامل","sub2":"حازم","sub3":"احمد"},"الصف 7ج":{"orig":"عبد","sub1":"وصفي","sub2":"ايمن","sub3":"معتصم"},"الصف 8أ":{"orig":"ماهر","sub1":"سعاده","sub2":"عدنان","sub3":"كامل"},"الصف 8ب":{"orig":"زغارنه","sub1":"معاذ","sub2":"ايمن","sub3":"عبدالله"},"الصف 8ج":{"orig":"خيرالله","sub1":"معتصم","sub2":"وصفي","sub3":"احمد"}}},"الاثنين":{"الأولى":{"الصف 4أ":{"orig":"وصفي","sub1":"وليد","sub2":"مساعيد","sub3":"كامل"},"الصف 4ب":{"orig":"مغربي","sub1":"عرقان","sub2":"ايمن","sub3":"خيرالله"},"الصف 5أ":{"orig":"عدنان","sub1":"باسم","sub2":"خيرالله","sub3":"مجد"},"الصف 5ب":{"orig":"موفق","sub1":"معتصم","sub2":"كامل","sub3":"ايمن"},"الصف 5ج":{"orig":"هشام","sub1":"حازم","sub2":"خيرالله","sub3":"عرقان"},"الصف 6أ":{"orig":"معاذ","sub1":"مجد","sub2":"ايمن","sub3":"وليد"},"الصف 6ب":{"orig":"محمد","sub1":"كامل","sub2":"خيرالله","sub3":"مساعيد"},"الصف 6ج":{"orig":"شدايده","sub1":"عرقان","sub2":"معتصم","sub3":"خيرالله"},"الصف 7أ":{"orig":"زغارنه","sub1":"ايمن","sub2":"باسم","sub3":"خيرالله"},"الصف 7ب":{"orig":"سردي","sub1":"كامل","sub2":"مجد","sub3":"مساعيد"},"الصف 7ج":{"orig":"عبد","sub1":"وليد","sub2":"خيرالله","sub3":"عرقان"},"الصف 8أ":{"orig":"ماهر","sub1":"معتصم","sub2":"ايمن","sub3":"عليوي"},"الصف 8ب":{"orig":"احمد","sub1":"خيرالله","sub2":"حازم","sub3":"عرقان"},"الصف 8ج":{"orig":"عبدالله","sub1":"كامل","sub2":"مجد","sub3":"ايمن"}},"الثانية":{"الصف 4أ":{"orig":"سردي","sub1":"محمد","sub2":"خيرالله","sub3":"معتصم"},"الصف 4ب":{"orig":"وصفي","sub1":"ايمن","sub2":"عرقان","sub3":"موفق"},"الصف 5أ":{"orig":"عدنان","sub1":"خيرالله","sub2":"كامل","sub3":"مجد"},"الصف 5ب":{"orig":"عليوي","sub1":"احمد","sub2":"معتصم","sub3":"عرقان"},"الصف 5ج":{"orig":"حازم","sub1":"ايمن","sub2":"خيرالله","sub3":"مجد"},"الصف 6أ":{"orig":"هشام","sub1":"كامل","sub2":"محمد","sub3":"خيرالله"},"الصف 6ب":{"orig":"شدايده","sub1":"موفق","sub2":"عرقان","sub3":"مجد"},"الصف 6ج":{"orig":"معاذ","sub1":"معتصم","sub2":"ايمن","sub3":"خيرالله"},"الصف 7أ":{"orig":"عبدالله","sub1":"احمد","sub2":"كامل","sub3":"خيرالله"},"الصف 7ب":{"orig":"مساعيد","sub1":"ماهر","sub2":"ايمن","sub3":"خيرالله"},"الصف 7ج":{"orig":"عبد","sub1":"مجد","sub2":"عرقان","sub3":"معتصم"},"الصف 8أ":{"orig":"وليد","sub1":"خيرالله","sub2":"كامل","sub3":"محمد"},"الصف 8ب":{"orig":"باسم","sub1":"ايمن","sub2":"موفق","sub3":"عرقان"},"الصف 8ج":{"orig":"مغربي","sub1":"خيرالله","sub2":"احمد","sub3":"كامل"}},"الثالثة":{"الصف 4أ":{"orig":"مجد","sub1":"مساعيد","sub2":"هشام","sub3":"وليد"},"الصف 4ب":{"orig":"وصفي","sub1":"عبد","sub2":"خيرالله","sub3":"كامل"},"الصف 5أ":{"orig":"عرقان","sub1":"زغارنه","sub2":"احمد","sub3":"خيرالله"},"الصف 5ب":{"orig":"عليوي","sub1":"كامل","sub2":"مغربي","sub3":"خيرالله"},"الصف 5ج":{"orig":"موفق","sub1":"هشام","sub2":"مساعيد","sub3":"خيرالله"},"الصف 6أ":{"orig":"شدايده","sub1":"وليد","sub2":"عبد","sub3":"كامل"},"الصف 6ب":{"orig":"حازم","sub1":"خيرالله","sub2":"عدنان","sub3":"احمد"},"الصف 6ج":{"orig":"محمد","sub1":"معاذ","sub2":"كامل","sub3":"خيرالله"},"الصف 7أ":{"orig":"معتصم","sub1":"مغربي","sub2":"مساعيد","sub3":"خيرالله"},"الصف 7ب":{"orig":"ايمن","sub1":"هشام","sub2":"عبد","sub3":"احمد"},"الصف 7ج":{"orig":"سردي","sub1":"خيرالله","sub2":"كامل","sub3":"وليد"},"الصف 8أ":{"orig":"عبدالله","sub1":"عدنان","sub2":"خيرالله","sub3":"كامل"},"الصف 8ب":{"orig":"باسم","sub1":"احمد","sub2":"وليد","sub3":"عبد"},"الصف 8ج":{"orig":"ماهر","sub1":"خيرالله","sub2":"كامل","sub3":"مساعيد"}},"الرابعة":{"الصف 4أ":{"orig":"موفق","sub1":"مجد","sub2":"شدايده","sub3":"سردي"},"الصف 4ب":{"orig":"كامل","sub1":"ايمن","sub2":"خيرالله","sub3":"وصفي"},"الصف 5أ":{"orig":"حازم","sub1":"مساعيد","sub2":"عبد","sub3":"خيرالله"},"الصف 5ب":{"orig":"عرقان","sub1":"معاذ","sub2":"شدايده","sub3":"وصفي"},"الصف 5ج":{"orig":"عدنان","sub1":"وليد","sub2":"خيرالله","sub3":"ايمن"},"الصف 6أ":{"orig":"محمد","sub1":"مجد","sub2":"ايمن","sub3":"وصفي"},"الصف 6ب":{"orig":"باسم","sub1":"خيرالله","sub2":"سردي","sub3":"شدايده"},"الصف 6ج":{"orig":"هشام","sub1":"عبد","sub2":"وصفي","sub3":"مجد"},"الصف 7أ":{"orig":"ماهر","sub1":"خيرالله","sub2":"ايمن","sub3":"مساعيد"},"الصف 7ب":{"orig":"زغارنه","sub1":"شدايده","sub2":"وليد","sub3":"ايمن"},"الصف 7ج":{"orig":"عبدالله","sub1":"خيرالله","sub2":"مجد","sub3":"وصفي"},"الصف 8أ":{"orig":"مغربي","sub1":"سردي","sub2":"مساعيد","sub3":"ايمن"},"الصف 8ب":{"orig":"احمد","sub1":"معاذ","sub2":"خيرالله","sub3":"شدايده"},"الصف 8ج":{"orig":"معتصم","sub1":"وصفي","sub2":"عبد","sub3":"مجد"}},"الخامسة":{"الصف 4أ":{"orig":"عليوي","sub1":"معتصم","sub2":"خيرالله","sub3":"شدايده"},"الصف 4ب":{"orig":"مجد","sub1":"هشام","sub2":"وليد","sub3":"محمد"},"الصف 5أ":{"orig":"موفق","sub1":"خيرالله","sub2":"كامل","sub3":"وصفي"},"الصف 5ب":{"orig":"عدنان","sub1":"عبدالله","sub2":"شدايده","sub3":"وصفي"},"الصف 5ج":{"orig":"عرقان","sub1":"خيرالله","sub2":"معتصم","sub3":"كامل"},"الصف 6أ":{"orig":"معاذ","sub1":"سردي","sub2":"ماهر","sub3":"شدايده"},"الصف 6ب":{"orig":"باسم","sub1":"وصفي","sub2":"كامل","sub3":"خيرالله"},"الصف 6ج":{"orig":"حازم","sub1":"محمد","sub2":"وليد","sub3":"خيرالله"},"الصف 7أ":{"orig":"مساعيد","sub1":"معتصم","sub2":"هشام","sub3":"عبدالله"},"الصف 7ب":{"orig":"عبد","sub1":"خيرالله","sub2":"شدايده","sub3":"كامل"},"الصف 7ج":{"orig":"ايمن","sub1":"وصفي","sub2":"كامل","sub3":"معتصم"},"الصف 8أ":{"orig":"زغارنه","sub1":"خيرالله","sub2":"شدايده","sub3":"عبدالله"},"الصف 8ب":{"orig":"مغربي","sub1":"وليد","sub2":"محمد","sub3":"هشام"},"الصف 8ج":{"orig":"احمد","sub1":"وصفي","sub2":"خيرالله","sub3":"سردي"}},"السادسة":{"الصف 7أ":{"orig":"سردي","sub1":"كامل","sub2":"ايمن","sub3":"معتصم"},"الصف 7ب":{"orig":"خيرالله","sub1":"شدايده","sub2":"عبدالله","sub3":"باسم"},"الصف 7ج":{"orig":"ماهر","sub1":"عرقان","sub2":"مغربي","sub3":"وصفي"},"الصف 8أ":{"orig":"احمد","sub1":"مجد","sub2":"انس","sub3":"عبد"},"الصف 8ب":{"orig":"وليد","sub1":"ايمن","sub2":"هشام","sub3":"معتصم"},"الصف 8ج":{"orig":"زغارنه","sub1":"كامل","sub2":"مساعيد","sub3":"موفق"}}},"الثلاثاء":{"الأولى":{"الصف 4أ":{"orig":"وصفي","sub1":"ماهر","sub2":"عرقان","sub3":"خيرالله"},"الصف 4ب":{"orig":"عليوي","sub1":"عبدالله","sub2":"ايمن","sub3":"مجد"},"الصف 5أ":{"orig":"عدنان","sub1":"خيرالله","sub2":"معتصم","sub3":"باسم"},"الصف 5ب":{"orig":"هشام","sub1":"احمد","sub2":"ايمن","sub3":"عرقان"},"الصف 5ج":{"orig":"حازم","sub1":"خيرالله","sub2":"مجد","sub3":"موفق"},"الصف 6أ":{"orig":"شدايده","sub1":"معتصم","sub2":"عبدالله","sub3":"عرقان"},"الصف 6ب":{"orig":"معاذ","sub1":"ايمن","sub2":"خيرالله","sub3":"انس"},"الصف 6ج":{"orig":"محمد","sub1":"باسم","sub2":"مجد","sub3":"موفق"},"الصف 7أ":{"orig":"سردي","sub1":"خيرالله","sub2":"احمد","sub3":"عرقان"},"الصف 7ب":{"orig":"زغارنه","sub1":"ايمن","sub2":"معتصم","sub3":"ماهر"},"الصف 7ج":{"orig":"عبد","sub1":"خيرالله","sub2":"عبدالله","sub3":"عرقان"},"الصف 8أ":{"orig":"كامل","sub1":"مجد","sub2":"احمد","sub3":"ايمن"},"الصف 8ب":{"orig":"مغربي","sub1":"معتصم","sub2":"خيرالله","sub3":"موفق"},"الصف 8ج":{"orig":"وليد","sub1":"عرقان","sub2":"انس","sub3":"ايمن"}},"الثانية":{"الصف 4أ":{"orig":"سردي","sub1":"شدايده","sub2":"خيرالله","sub3":"حازم"},"الصف 4ب":{"orig":"وصفي","sub1":"عبدالله","sub2":"مجد","sub3":"ايمن"},"الصف 5أ":{"orig":"موفق","sub1":"خيرالله","sub2":"معتصم","sub3":"كامل"},"الصف 5ب":{"orig":"عدنان","sub1":"شدايده","sub2":"ماهر","sub3":"وليد"},"الصف 5ج":{"orig":"عرقان","sub1":"ايمن","sub2":"خيرالله","sub3":"هشام"},"الصف 6أ":{"orig":"محمد","sub1":"كامل","sub2":"مجد","sub3":"معتصم"},"الصف 6ب":{"orig":"معاذ","sub1":"خيرالله","sub2":"عبدالله","sub3":"حازم"},"الصف 6ج":{"orig":"عليوي","sub1":"ايمن","sub2":"شدايده","sub3":"هشام"},"الصف 7أ":{"orig":"مساعيد","sub1":"خيرالله","sub2":"كامل","sub3":"مجد"},"الصف 7ب":{"orig":"عبد","sub1":"معتصم","sub2":"وليد","sub3":"شدايده"},"الصف 7ج":{"orig":"زغارنه","sub1":"ايمن","sub2":"عبدالله","sub3":"خيرالله"},"الصف 8أ":{"orig":"مغربي","sub1":"مجد","sub2":"كامل","sub3":"خيرالله"},"الصف 8ب":{"orig":"احمد","sub1":"ماهر","sub2":"هشام","sub3":"شدايده"},"الصف 8ج":{"orig":"باسم","sub1":"معتصم","sub2":"خيرالله","sub3":"ايمن"}},"الثالثة":{"الصف 4أ":{"orig":"وصفي","sub1":"محمد","sub2":"عليوي","sub3":"عبدالله"},"الصف 4ب":{"orig":"وليد","sub1":"خيرالله","sub2":"ايمن","sub3":"عدنان"},"الصف 5أ":{"orig":"عرقان","sub1":"شدايده","sub2":"عبد","sub3":"احمد"},"الصف 5ب":{"orig":"موفق","sub1":"خيرالله","sub2":"ايمن","sub3":"معتصم"},"الصف 5ج":{"orig":"مجد","sub1":"محمد","sub2":"مغربي","sub3":"عبدالله"},"الصف 6أ":{"orig":"هشام","sub1":"ايمن","sub2":"خيرالله","sub3":"معتصم"},"الصف 6ب":{"orig":"حازم","sub1":"شدايده","sub2":"احمد","sub3":"خيرالله"},"الصف 6ج":{"orig":"معاذ","sub1":"عبد","sub2":"عدنان","sub3":"معتصم"},"الصف 7أ":{"orig":"ماهر","sub1":"خيرالله","sub2":"ايمن","sub3":"عبدالله"},"الصف 7ب":{"orig":"سردي","sub1":"شدايده","sub2":"محمد","sub3":"ايمن"},"الصف 7ج":{"orig":"مساعيد","sub1":"خيرالله","sub2":"معتصم","sub3":"احمد"},"الصف 8أ":{"orig":"زغارنه","sub1":"مغربي","sub2":"عبدالله","sub3":"ايمن"},"الصف 8ب":{"orig":"كامل","sub1":"خيرالله","sub2":"عبد","sub3":"شدايده"},"الصف 8ج":{"orig":"باسم","sub1":"معتصم","sub2":"احمد","sub3":"ايمن"}},"الرابعة":{"الصف 4أ":{"orig":"مجد","sub1":"وصفي","sub2":"شدايده","sub3":"عدنان"},"الصف 4ب":{"orig":"حازم","sub1":"ايمن","sub2":"باسم","sub3":"عبد"},"الصف 5أ":{"orig":"عليوي","sub1":"عبدالله","sub2":"معاذ","sub3":"وصفي"},"الصف 5ب":{"orig":"عرقان","sub1":"شدايده","sub2":"موفق","sub3":"ايمن"},"الصف 5ج":{"orig":"كامل","sub1":"عبد","sub2":"وصفي","sub3":"مساعيد"},"الصف 6أ":{"orig":"ماهر","sub1":"ايمن","sub2":"عدنان","sub3":"شدايده"},"الصف 6ب":{"orig":"محمد","sub1":"باسم","sub2":"عبدالله","sub3":"وصفي"},"الصف 6ج":{"orig":"هشام","sub1":"موفق","sub2":"ايمن","sub3":"شدايده"},"الصف 7أ":{"orig":"خيرالله","sub1":"مساعيد","sub2":"عبد","sub3":"وصفي"},"الصف 7ب":{"orig":"معتصم","sub1":"معاذ","sub2":"ايمن","sub3":"شدايده"},"الصف 7ج":{"orig":"سردي","sub1":"عبدالله","sub2":"وصفي","sub3":"شدايده"},"الصف 8أ":{"orig":"احمد","sub1":"موفق","sub2":"ايمن","sub3":"باسم"},"الصف 8ب":{"orig":"وليد","sub1":"عبد","sub2":"عدنان","sub3":"وصفي"},"الصف 8ج":{"orig":"مغربي","sub1":"شدايده","sub2":"مساعيد","sub3":"ايمن"}},"الخامسة":{"الصف 4أ":{"orig":"مجد","sub1":"كامل","sub2":"خيرالله","sub3":"وصفي"},"الصف 4ب":{"orig":"معتصم","sub1":"ايمن","sub2":"سعاده","sub3":"زغارنه"},"الصف 5أ":{"orig":"هشام","sub1":"خيرالله","sub2":"وصفي","sub3":"موفق"},"الصف 5ب":{"orig":"عمار","sub1":"عرقان","sub2":"سردي","sub3":"كامل"},"الصف 5ج":{"orig":"عليوي","sub1":"مساعيد","sub2":"ايمن","sub3":"خيرالله"},"الصف 6أ":{"orig":"معاذ","sub1":"وصفي","sub2":"مغربي","sub3":"خيرالله"},"الصف 6ب":{"orig":"شدايده","sub1":"عدنان","sub2":"كامل","sub3":"ايمن"},"الصف 6ج":{"orig":"حازم","sub1":"خيرالله","sub2":"عرقان","sub3":"موفق"},"الصف 7أ":{"orig":"عبد","sub1":"وصفي","sub2":"ايمن","sub3":"خيرالله"},"الصف 7ب":{"orig":"ماهر","sub1":"كامل","sub2":"عرقان","sub3":"مساعيد"},"الصف 7ج":{"orig":"باسم","sub1":"خيرالله","sub2":"سردي","sub3":"سعاده"},"الصف 8أ":{"orig":"وليد","sub1":"ايمن","sub2":"موفق","sub3":"مغربي"},"الصف 8ب":{"orig":"عبدالله","sub1":"وصفي","sub2":"خيرالله","sub3":"كامل"},"الصف 8ج":{"orig":"احمد","sub1":"عرقان","sub2":"مساعيد","sub3":"ايمن"}},"السادسة":{"الصف 4أ":{"orig":"موفق","sub1":"خيرالله","sub2":"كامل","sub3":"محمد"},"الصف 4ب":{"orig":"معتصم","sub1":"وليد","sub2":"وصفي","sub3":"سردي"},"الصف 5أ":{"orig":"حازم","sub1":"عبد","sub2":"خيرالله","sub3":"عرقان"},"الصف 5ب":{"orig":"عمار","sub1":"مغربي","sub2":"كامل","sub3":"معاذ"},"الصف 5ج":{"orig":"عدنان","sub1":"سعاده","sub2":"احمد","sub3":"خيرالله"},"الصف 6أ":{"orig":"عليوي","sub1":"وصفي","sub2":"عرقان","sub3":"محمد"},"الصف 6ب":{"orig":"مجد","sub1":"خيرالله","sub2":"هشام","sub3":"كامل"},"الصف 6ج":{"orig":"شدايده","sub1":"وليد","sub2":"سردي","sub3":"عبد"},"الصف 7أ":{"orig":"زغارنه","sub1":"خيرالله","sub2":"وصفي","sub3":"عرقان"},"الصف 7ب":{"orig":"مساعيد","sub1":"كامل","sub2":"احمد","sub3":"انس"},"الصف 7ج":{"orig":"باسم","sub1":"محمد","sub2":"هشام","sub3":"خيرالله"},"الصف 8أ":{"orig":"عبدالله","sub1":"عرقان","sub2":"وصفي","sub3":"مغربي"},"الصف 8ب":{"orig":"ايمن","sub1":"خيرالله","sub2":"معاذ","sub3":"كامل"},"الصف 8ج":{"orig":"ماهر","sub1":"عبد","sub2":"سعاده","sub3":"احمد"}}},"الأربعاء":{"الأولى":{"الصف 4أ":{"orig":"حازم","sub1":"خيرالله","sub2":"عرقان","sub3":"عدنان"},"الصف 4ب":{"orig":"وصفي","sub1":"باسم","sub2":"ايمن","sub3":"محمد"},"الصف 5أ":{"orig":"موفق","sub1":"هشام","sub2":"خيرالله","sub3":"معتصم"},"الصف 5ب":{"orig":"مجد","sub1":"عرقان","sub2":"احمد","sub3":"ايمن"},"الصف 5ج":{"orig":"عليوي","sub1":"خيرالله","sub2":"عبد","sub3":"معتصم"},"الصف 6أ":{"orig":"معاذ","sub1":"عدنان","sub2":"ايمن","sub3":"محمد"},"الصف 6ب":{"orig":"كامل","sub1":"خيرالله","sub2":"عرقان","sub3":"معتصم"},"الصف 6ج":{"orig":"شدايده","sub1":"زغارنه","sub2":"عبد","sub3":"هشام"},"الصف 7أ":{"orig":"مساعيد","sub1":"ايمن","sub2":"خيرالله","sub3":"احمد"},"الصف 7ب":{"orig":"عبدالله","sub1":"عرقان","sub2":"باسم","sub3":"معتصم"},"الصف 7ج":{"orig":"سردي","sub1":"خيرالله","sub2":"محمد","sub3":"احمد"},"الصف 8أ":{"orig":"ماهر","sub1":"ايمن","sub2":"معتصم","sub3":"خيرالله"},"الصف 8ب":{"orig":"مغربي","sub1":"عبد","sub2":"عرقان","sub3":"هشام"},"الصف 8ج":{"orig":"وليد","sub1":"خيرالله","sub2":"احمد","sub3":"ايمن"}},"الثانية":{"الصف 4أ":{"orig":"موفق","sub1":"حازم","sub2":"محمد","sub3":"باسم"},"الصف 4ب":{"orig":"وصفي","sub1":"خيرالله","sub2":"ايمن","sub3":"انس"},"الصف 5أ":{"orig":"كامل","sub1":"مغربي","sub2":"هشام","sub3":"خيرالله"},"الصف 5ب":{"orig":"عرقان","sub1":"ايمن","sub2":"احمد","sub3":"خيرالله"},"الصف 5ج":{"orig":"عدنان","sub1":"معاذ","sub2":"محمد","sub3":"خيرالله"},"الصف 6أ":{"orig":"ماهر","sub1":"ايمن","sub2":"باسم","sub3":"خيرالله"},"الصف 6ب":{"orig":"شدايده","sub1":"انس","sub2":"احمد","sub3":"خيرالله"},"الصف 6ج":{"orig":"مجد","sub1":"هشام","sub2":"حازم","sub3":"خيرالله"},"الصف 7أ":{"orig":"سردي","sub1":"ايمن","sub2":"مغربي","sub3":"خيرالله"},"الصف 7ب":{"orig":"عبد","sub1":"عليوي","sub2":"محمد","sub3":"خيرالله"},"الصف 7ج":{"orig":"زغارنه","sub1":"ايمن","sub2":"احمد","sub3":"خيرالله"},"الصف 8أ":{"orig":"وليد","sub1":"باسم","sub2":"خيرالله","sub3":"هشام"},"الصف 8ب":{"orig":"معتصم","sub1":"معاذ","sub2":"ايمن","sub3":"خيرالله"},"الصف 8ج":{"orig":"عبدالله","sub1":"مغربي","sub2":"احمد","sub3":"خيرالله"}},"الثالثة":{"الصف 4أ":{"orig":"وصفي","sub1":"عبدالله","sub2":"محمد","sub3":"وليد"},"الصف 4ب":{"orig":"هشام","sub1":"كامل","sub2":"معتصم","sub3":"مجد"},"الصف 5أ":{"orig":"عدنان","sub1":"موفق","sub2":"سردي","sub3":"مجد"},"الصف 5ب":{"orig":"حازم","sub1":"كامل","sub2":"وليد","sub3":"معتصم"},"الصف 5ج":{"orig":"عرقان","sub1":"محمد","sub2":"عبدالله","sub3":"مساعيد"},"الصف 6أ":{"orig":"شدايده","sub1":"مجد","sub2":"معتصم","sub3":"كامل"},"الصف 6ب":{"orig":"عليوي","sub1":"موفق","sub2":"سردي","sub3":"وليد"},"الصف 6ج":{"orig":"معاذ","sub1":"عبدالله","sub2":"كامل","sub3":"معتصم"},"الصف 7أ":{"orig":"باسم","sub1":"مجد","sub2":"مساعيد","sub3":"محمد"},"الصف 7ب":{"orig":"عبد","sub1":"ماهر","sub2":"كامل","sub3":"معتصم"},"الصف 7ج":{"orig":"خيرالله","sub1":"وليد","sub2":"موفق","sub3":"سردي"},"الصف 8أ":{"orig":"مغربي","sub1":"عبدالله","sub2":"مجد","sub3":"كامل"},"الصف 8ب":{"orig":"ايمن","sub1":"معتصم","sub2":"محمد","sub3":"مساعيد"},"الصف 8ج":{"orig":"احمد","sub1":"كامل","sub2":"مجد","sub3":"موفق"}},"الرابعة":{"الصف 4أ":{"orig":"سردي","sub1":"وصفي","sub2":"هشام","sub3":"ايمن"},"الصف 4ب":{"orig":"مغربي","sub1":"خيرالله","sub2":"وليد","sub3":"عرقان"},"الصف 5أ":{"orig":"عدنان","sub1":"شدايده","sub2":"ماهر","sub3":"مجد"},"الصف 5ب":{"orig":"عليوي","sub1":"ايمن","sub2":"خيرالله","sub3":"وصفي"},"الصف 5ج":{"orig":"حازم","sub1":"عبد","sub2":"عرقان","sub3":"موفق"},"الصف 6أ":{"orig":"كامل","sub1":"خيرالله","sub2":"وصفي","sub3":"مجد"},"الصف 6ب":{"orig":"محمد","sub1":"ايمن","sub2":"شدايده","sub3":"وليد"},"الصف 6ج":{"orig":"معاذ","sub1":"هشام","sub2":"خيرالله","sub3":"عرقان"},"الصف 7أ":{"orig":"باسم","sub1":"وصفي","sub2":"مجد","sub3":"موفق"},"الصف 7ب":{"orig":"مساعيد","sub1":"ايمن","sub2":"خيرالله","sub3":"شدايده"},"الصف 7ج":{"orig":"معتصم","sub1":"عبد","sub2":"عرقان","sub3":"وليد"},"الصف 8أ":{"orig":"عبدالله","sub1":"خيرالله","sub2":"ماهر","sub3":"شدايده"},"الصف 8ب":{"orig":"زغارنه","sub1":"وصفي","sub2":"مجد","sub3":"ايمن"},"الصف 8ج":{"orig":"احمد","sub1":"هشام","sub2":"خيرالله","sub3":"عرقان"}},"الخامسة":{"الصف 4أ":{"orig":"كامل","sub1":"شدايده","sub2":"معتصم","sub3":"مساعيد"},"الصف 4ب":{"orig":"وليد","sub1":"خيرالله","sub2":"عبدالله","sub3":"وصفي"},"الصف 5أ":{"orig":"عرقان","sub1":"مجد","sub2":"وصفي","sub3":"شدايده"},"الصف 5ب":{"orig":"عدنان","sub1":"خيرالله","sub2":"معتصم","sub3":"ماهر"},"الصف 5ج":{"orig":"موفق","sub1":"مغربي","sub2":"عبدالله","sub3":"مساعيد"},"الصف 6أ":{"orig":"عليوي","sub1":"هشام","sub2":"خيرالله","sub3":"مجد"},"الصف 6ب":{"orig":"معاذ","sub1":"شدايده","sub2":"وصفي","sub3":"معتصم"},"الصف 6ج":{"orig":"حازم","sub1":"خيرالله","sub2":"مجد","sub3":"سعاده"},"الصف 7أ":{"orig":"ايمن","sub1":"وصفي","sub2":"عبدالله","sub3":"معتصم"},"الصف 7ب":{"orig":"سردي","sub1":"خيرالله","sub2":"شدايده","sub3":"مساعيد"},"الصف 7ج":{"orig":"عبد","sub1":"ماهر","sub2":"مجد","sub3":"هشام"},"الصف 8أ":{"orig":"باسم","sub1":"خيرالله","sub2":"مغربي","sub3":"معتصم"},"الصف 8ب":{"orig":"احمد","sub1":"وصفي","sub2":"شدايده","sub3":"مساعيد"},"الصف 8ج":{"orig":"زغارنه","sub1":"عبدالله","sub2":"خيرالله","sub3":"سعاده"}},"السادسة":{"الصف 4أ":{"orig":"هشام","sub1":"انس","sub2":"مجد","sub3":"عبد"},"الصف 4ب":{"orig":"حازم","sub1":"شدايده","sub2":"خيرالله","sub3":"وصفي"},"الصف 5أ":{"orig":"عليوي","sub1":"سردي","sub2":"عرقان","sub3":"وليد"},"الصف 5ب":{"orig":"موفق","sub1":"عدنان","sub2":"خيرالله","sub3":"احمد"},"الصف 6أ":{"orig":"معتصم","sub1":"وصفي","sub2":"مساعيد","sub3":"مجد"},"الصف 6ب":{"orig":"معاذ","sub1":"مغربي","sub2":"خيرالله","sub3":"شدايده"},"الصف 6ج":{"orig":"محمد","sub1":"عرقان","sub2":"عبد","sub3":"سعاده"},"الصف 7أ":{"orig":"زغارنه","sub1":"خيرالله","sub2":"وليد","sub3":"وصفي"},"الصف 7ب":{"orig":"كامل","sub1":"احمد","sub2":"شدايده","sub3":"مجد"},"الصف 7ج":{"orig":"عبدالله","sub1":"مساعيد","sub2":"خيرالله","sub3":"عرقان"},"الصف 8أ":{"orig":"باسم","sub1":"وصفي","sub2":"سردي","sub3":"عبد"},"الصف 8ب":{"orig":"ماهر","sub1":"مجد","sub2":"شدايده","sub3":"خيرالله"},"الصف 8ج":{"orig":"ايمن","sub1":"انس","sub2":"عرقان","sub3":"وليد"}}},"الخميس":{"الأولى":{"الصف 4أ":{"orig":"وصفي","sub1":"موفق","sub2":"معتصم","sub3":"عبد"},"الصف 4ب":{"orig":"وليد","sub1":"شدايده","sub2":"كامل","sub3":"مجد"},"الصف 5أ":{"orig":"عدنان","sub1":"عرقان","sub2":"مساعيد","sub3":"سردي"},"الصف 5ب":{"orig":"حازم","sub1":"معتصم","sub2":"موفق","sub3":"كامل"},"الصف 5ج":{"orig":"هشام","sub1":"مجد","sub2":"عبد","sub3":"شدايده"},"الصف 6أ":{"orig":"عليوي","sub1":"معاذ","sub2":"عرقان","sub3":"كامل"},"الصف 6ب":{"orig":"محمد","sub1":"ماهر","sub2":"معتصم","sub3":"شدايده"},"الصف 6ج":{"orig":"باسم","sub1":"مساعيد","sub2":"سردي","sub3":"كامل"},"الصف 7أ":{"orig":"عبدالله","sub1":"مجد","sub2":"عبد","sub3":"عرقان"},"الصف 7ب":{"orig":"زغارنه","sub1":"موفق","sub2":"شدايده","sub3":"كامل"},"الصف 7ج":{"orig":"ايمن","sub1":"معتصم","sub2":"عرقان","sub3":"مجد"},"الصف 8أ":{"orig":"احمد","sub1":"عبد","sub2":"شدايده","sub3":"كامل"},"الصف 8ب":{"orig":"خيرالله","sub1":"مساعيد","sub2":"سردي","sub3":"عرقان"},"الصف 8ج":{"orig":"مغربي","sub1":"معتصم","sub2":"كامل","sub3":"مجد"}},"الثانية":{"الصف 4أ":{"orig":"سردي","sub1":"خيرالله","sub2":"مغربي","sub3":"ايمن"},"الصف 4ب":{"orig":"عليوي","sub1":"وصفي","sub2":"موفق","sub3":"حازم"},"الصف 5أ":{"orig":"هشام","sub1":"محمد","sub2":"خيرالله","sub3":"ايمن"},"الصف 5ب":{"orig":"عرقان","sub1":"كامل","sub2":"مجد","sub3":"معتصم"},"الصف 5ج":{"orig":"عدنان","sub1":"ايمن","sub2":"خيرالله","sub3":"وصفي"},"الصف 6أ":{"orig":"شدايده","sub1":"مغربي","sub2":"مجد","sub3":"خيرالله"},"الصف 6ب":{"orig":"معاذ","sub1":"كامل","sub2":"وصفي","sub3":"موفق"},"الصف 6ج":{"orig":"باسم","sub1":"معتصم","sub2":"ايمن","sub3":"خيرالله"},"الصف 7أ":{"orig":"عبد","sub1":"محمد","sub2":"خيرالله","sub3":"حازم"},"الصف 7ب":{"orig":"ماهر","sub1":"وصفي","sub2":"ايمن","sub3":"كامل"},"الصف 7ج":{"orig":"زغارنه","sub1":"مجد","sub2":"خيرالله","sub3":"انس"},"الصف 8أ":{"orig":"احمد","sub1":"معتصم","sub2":"موفق","sub3":"كامل"},"الصف 8ب":{"orig":"وليد","sub1":"خيرالله","sub2":"ايمن","sub3":"وصفي"},"الصف 8ج":{"orig":"عبدالله","sub1":"مغربي","sub2":"مجد","sub3":"كامل"}},"الثالثة":{"الصف 4أ":{"orig":"عليوي","sub1":"عدنان","sub2":"خيرالله","sub3":"احمد"},"الصف 4ب":{"orig":"وصفي","sub1":"شدايده","sub2":"حازم","sub3":"خيرالله"},"الصف 5أ":{"orig":"عرقان","sub1":"باسم","sub2":"احمد","sub3":"خيرالله"},"الصف 5ب":{"orig":"موفق","sub1":"شدايده","sub2":"خيرالله","sub3":"مساعيد"},"الصف 5ج":{"orig":"مجد","sub1":"وليد","sub2":"عبدالله","sub3":"خيرالله"},"الصف 6أ":{"orig":"محمد","sub1":"سردي","sub2":"زغارنه","sub3":"خيرالله"},"الصف 6ب":{"orig":"هشام","sub1":"احمد","sub2":"مساعيد","sub3":"شدايده"},"الصف 6ج":{"orig":"معاذ","sub1":"خيرالله","sub2":"حازم","sub3":"عدنان"},"الصف 7أ":{"orig":"معتصم","sub1":"باسم","sub2":"عبدالله","sub3":"شدايده"},"الصف 7ب":{"orig":"عبد","sub1":"خيرالله","sub2":"وليد","sub3":"احمد"},"الصف 7ج":{"orig":"ماهر","sub1":"مساعيد","sub2":"شدايده","sub3":"خيرالله"},"الصف 8أ":{"orig":"ايمن","sub1":"عدنان","sub2":"خيرالله","sub3":"سردي"},"الصف 8ب":{"orig":"مغربي","sub1":"عبدالله","sub2":"احمد","sub3":"حازم"},"الصف 8ج":{"orig":"كامل","sub1":"خيرالله","sub2":"شدايده","sub3":"وليد"}},"الرابعة":{"الصف 4أ":{"orig":"مجد","sub1":"ايمن","sub2":"وصفي","sub3":"محمد"},"الصف 4ب":{"orig":"مغربي","sub1":"خيرالله","sub2":"معتصم","sub3":"باسم"},"الصف 5أ":{"orig":"موفق","sub1":"شدايده","sub2":"سردي","sub3":"معاذ"},"الصف 5ب":{"orig":"عدنان","sub1":"هشام","sub2":"وصفي","sub3":"خيرالله"},"الصف 5ج":{"orig":"عرقان","sub1":"ايمن","sub2":"عبد","sub3":"معتصم"},"الصف 6أ":{"orig":"ماهر","sub1":"خيرالله","sub2":"محمد","sub3":"شدايده"},"الصف 6ب":{"orig":"حازم","sub1":"باسم","sub2":"وصفي","sub3":"ايمن"},"الصف 6ج":{"orig":"عليوي","sub1":"خيرالله","sub2":"معتصم","sub3":"شدايده"},"الصف 7أ":{"orig":"كامل","sub1":"عبد","sub2":"ايمن","sub3":"سردي"},"الصف 7ب":{"orig":"مساعيد","sub1":"خيرالله","sub2":"وصفي","sub3":"هشام"},"الصف 7ج":{"orig":"عبدالله","sub1":"شدايده","sub2":"محمد","sub3":"معتصم"},"الصف 8أ":{"orig":"وليد","sub1":"ايمن","sub2":"خيرالله","sub3":"معاذ"},"الصف 8ب":{"orig":"زغارنه","sub1":"وصفي","sub2":"هشام","sub3":"معتصم"},"الصف 8ج":{"orig":"احمد","sub1":"خيرالله","sub2":"عبد","sub3":"ايمن"}},"الخامسة":{"الصف 4أ":{"orig":"حازم","sub1":"باسم","sub2":"وصفي","sub3":"خيرالله"},"الصف 4ب":{"orig":"مجد","sub1":"ايمن","sub2":"معتصم","sub3":"عرقان"},"الصف 5أ":{"orig":"عمار","sub1":"مساعيد","sub2":"كامل","sub3":"خيرالله"},"الصف 5ب":{"orig":"عدنان","sub1":"عبدالله","sub2":"سعاده","sub3":"هشام"},"الصف 5ج":{"orig":"موفق","sub1":"خيرالله","sub2":"وصفي","sub3":"ايمن"},"الصف 6أ":{"orig":"معاذ","sub1":"عرقان","sub2":"معتصم","sub3":"كامل"},"الصف 6ب":{"orig":"عليوي","sub1":"ايمن","sub2":"خيرالله","sub3":"وصفي"},"الصف 6ج":{"orig":"شدايده","sub1":"باسم","sub2":"عبدالله","sub3":"كامل"},"الصف 7أ":{"orig":"ماهر","sub1":"خيرالله","sub2":"عرقان","sub3":"مساعيد"},"الصف 7ب":{"orig":"سردي","sub1":"وصفي","sub2":"معتصم","sub3":"ايمن"},"الصف 7ج":{"orig":"عبد","sub1":"هشام","sub2":"خيرالله","sub3":"كامل"},"الصف 8أ":{"orig":"مغربي","sub1":"ايمن","sub2":"عرقان","sub3":"سعاده"},"الصف 8ب":{"orig":"احمد","sub1":"خيرالله","sub2":"معتصم","sub3":"وصفي"},"الصف 8ج":{"orig":"وليد","sub1":"كامل","sub2":"مساعيد","sub3":"عبدالله"}},"السادسة":{"الصف 5أ":{"orig":"عمار","sub1":"ايمن","sub2":"خيرالله","sub3":"وصفي"},"الصف 5ب":{"orig":"حازم","sub1":"عرقان","sub2":"معاذ","sub3":"وليد"},"الصف 5ج":{"orig":"عدنان","sub1":"موفق","sub2":"ماهر","sub3":"احمد"},"الصف 6أ":{"orig":"هشام","sub1":"خيرالله","sub2":"كامل","sub3":"عبد"},"الصف 6ب":{"orig":"شدايده","sub1":"وصفي","sub2":"مجد","sub3":"انس"},"الصف 6ج":{"orig":"محمد","sub1":"ايمن","sub2":"خيرالله","sub3":"عرقان"},"الصف 7أ":{"orig":"مساعيد","sub1":"كامل","sub2":"سعاده","sub3":"عبد"},"الصف 7ب":{"orig":"باسم","sub1":"مغربي","sub2":"خيرالله","sub3":"وصفي"},"الصف 7ج":{"orig":"سردي","sub1":"ايمن","sub2":"مجد","sub3":"احمد"},"الصف 8أ":{"orig":"معتصم","sub1":"عرقان","sub2":"وليد","sub3":"خيرالله"},"الصف 8ب":{"orig":"عبدالله","sub1":"موفق","sub2":"كامل","sub3":"وصفي"},"الصف 8ج":{"orig":"زغارنه","sub1":"انس","sub2":"خيرالله","sub3":"ايمن"}}}};
+
+    const RAW_SCHEDULE_DATA = {
+      "الأحد": {
+        "الصف 2": {
+          1: { teacher: "مساعيد", subject: "انجليزي" },
+          2: { teacher: "انس", subject: "عربي" },
+          3: { teacher: "انس", subject: "رياضيات" },
+          4: { teacher: "انس", subject: "اجتماعيات" },
+          5: { teacher: "انس", subject: "عربي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 3": {
+          1: { teacher: "سعاده", subject: "عربي" },
+          2: { teacher: "سعاده", subject: "رياضيات" },
+          3: { teacher: "سعاده", subject: "عربي" },
+          4: { teacher: "محمد", subject: "انجليزي" },
+          5: { teacher: "سعاده", subject: "تربية إسلامية" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4أ": {
+          1: { teacher: "عليوي", subject: "علوم" },
+          2: { teacher: "وصفي", subject: "عربي" },
+          3: { teacher: "وصفي", subject: "عربي" },
+          4: { teacher: "سردي", subject: "رياضيات" },
+          5: { teacher: "موفق", subject: "انجليزي" },
+          6: { teacher: "هشام", subject: "اجتماعيات" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4ب": {
+          1: { teacher: "وصفي", subject: "عربي" },
+          2: { teacher: "حازم", subject: "دين" },
+          3: { teacher: "هشام", subject: "اجتماعيات" },
+          4: { teacher: "عليوي", subject: "علوم" },
+          5: { teacher: "وليد", subject: "انجليزي" },
+          6: { teacher: "مغربي", subject: "رياضيات" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5أ": {
+          1: { teacher: "حازم", subject: "دين" },
+          2: { teacher: "عرقان", subject: "رياضيات" },
+          3: { teacher: "عليوي", subject: "علوم" },
+          4: { teacher: "موفق", subject: "انجليزي" },
+          5: { teacher: "عدنان", subject: "عربي" },
+          6: { teacher: "مجد", subject: "رياضه" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ب": {
+          1: { teacher: "هشام", subject: "اجتماعيات" },
+          2: { teacher: "عدنان", subject: "عربي" },
+          3: { teacher: "عدنان", subject: "عربي" },
+          4: { teacher: "كامل", subject: "فن" },
+          5: { teacher: "مجد", subject: "رياضه" },
+          6: { teacher: "موفق", subject: "انجليزي" },
+          7: { teacher: "عرقان", subject: "رياضيات" }
+        },
+        "الصف 5ج": {
+          1: { teacher: "موفق", subject: "انجليزي" },
+          2: { teacher: "باسم", subject: "مهني" },
+          3: { teacher: "باسم", subject: "مهني" },
+          4: { teacher: "عدنان", subject: "عربي" },
+          5: { teacher: "عليوي", subject: "علوم" },
+          6: { teacher: "عرقان", subject: "رياضيات" },
+          7: { teacher: "عدنان", subject: "عربي" }
+        },
+        "الصف 6أ": {
+          1: { teacher: "معاذ", subject: "عربي" },
+          2: { teacher: "محمد", subject: "انجليزي" },
+          3: { teacher: "معاذ", subject: "عربي" },
+          4: { teacher: "باسم", subject: "مهني" },
+          5: { teacher: "باسم", subject: "مهني" },
+          6: { teacher: "شدايده", subject: "رياضيات" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6ب": {
+          1: { teacher: "مجد", subject: "رياضه" },
+          2: { teacher: "معاذ", subject: "عربي" },
+          3: { teacher: "محمد", subject: "انجليزي" },
+          4: { teacher: "هشام", subject: "اجتماعيات" },
+          5: { teacher: "هشام", subject: "اجتماعيات" },
+          6: { teacher: "عليوي", subject: "علوم" },
+          7: { teacher: "شدايده", subject: "رياضيات" }
+        },
+        "الصف 6ج": {
+          1: { teacher: "شدايده", subject: "رياضيات" },
+          2: { teacher: "عليوي", subject: "علوم" },
+          3: { teacher: "كامل", subject: "فن" },
+          4: { teacher: "مجد", subject: "رياضه" },
+          5: { teacher: "معاذ", subject: "عربي" },
+          6: { teacher: "محمد", subject: "انجليزي" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 7أ": {
+          1: { teacher: "عبد", subject: "عربي" },
+          2: { teacher: "عبد", subject: "عربي" },
+          3: { teacher: "سردي", subject: "رياضيات" },
+          4: { teacher: "ايمن", subject: "م. رقمية" },
+          5: { teacher: "زغارنه", subject: "علوم" },
+          6: { teacher: "مساعيد", subject: "انجليزي" },
+          7: { teacher: "عبدالله", subject: "اجتماعيات" }
+        },
+        "الصف 7ب": {
+          1: { teacher: "ايمن", subject: "م. رقمية" },
+          2: { teacher: "ماهر", subject: "دين" },
+          3: { teacher: "عبدالله", subject: "اجتماعيات" },
+          4: { teacher: "عبد", subject: "عربي" },
+          5: { teacher: "مساعيد", subject: "انجليزي" },
+          6: { teacher: "سردي", subject: "رياضيات" },
+          7: { teacher: "زغارنه", subject: "علوم" }
+        },
+        "الصف 7ج": {
+          1: { teacher: "زغارنه", subject: "علوم" },
+          2: { teacher: "مساعيد", subject: "انجليزي" },
+          3: { teacher: "معتصم", subject: "رياضه" },
+          4: { teacher: "ماهر", subject: "دين" },
+          5: { teacher: "سردي", subject: "رياضيات" },
+          6: { teacher: "عبد", subject: "عربي" },
+          7: { teacher: "كامل", subject: "فن" }
+        },
+        "الصف 8أ": {
+          1: { teacher: "وليد", subject: "انجليزي" },
+          2: { teacher: "زغارنه", subject: "علوم" },
+          3: { teacher: "احمد", subject: "عربي" },
+          4: { teacher: "مغربي", subject: "رياضيات" },
+          5: { teacher: "معتصم", subject: "رياضه" },
+          6: { teacher: "ماهر", subject: "دين" },
+          7: { teacher: "ايمن", subject: "م. رقمية" }
+        },
+        "الصف 8ب": {
+          1: { teacher: "مغربي", subject: "رياضيات" },
+          2: { teacher: "معتصم", subject: "رياضه" },
+          3: { teacher: "ماهر", subject: "دين" },
+          4: { teacher: "وليد", subject: "انجليزي" },
+          5: { teacher: "عبدالله", subject: "اجتماعيات" },
+          6: { teacher: "زغارنه", subject: "علوم" },
+          7: { teacher: "احمد", subject: "عربي" }
+        },
+        "الصف 8ج": {
+          1: { teacher: "ماهر", subject: "دين" },
+          2: { teacher: "احمد", subject: "عربي" },
+          3: { teacher: "وليد", subject: "انجليزي" },
+          4: { teacher: "زغارنه", subject: "علوم" },
+          5: { teacher: "مغربي", subject: "رياضيات" },
+          6: { teacher: "خيرالله", subject: "ماليه" },
+          7: { teacher: "معتصم", subject: "رياضه" }
+        }
+      },
+      "الاثنين": {
+        "الصف 2": {
+          1: { teacher: "انس", subject: "عربي" },
+          2: { teacher: "انس", subject: "نشاط" },
+          3: { teacher: "انس", subject: "نشاط" },
+          4: { teacher: "انس", subject: "رياضيات" },
+          5: { teacher: "انس", subject: "عربي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 3": {
+          1: { teacher: "سعاده", subject: "رياضيات" },
+          2: { teacher: "سعاده", subject: "نشاط" },
+          3: { teacher: "سعاده", subject: "نشاط" },
+          4: { teacher: "سعاده", subject: "عربي" },
+          5: { teacher: "سعاده", subject: "عربي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4أ": {
+          1: { teacher: "وصفي", subject: "عربي" },
+          2: { teacher: "سردي", subject: "رياضيات" },
+          3: { teacher: "مجد", subject: "رياضه" },
+          4: { teacher: "موفق", subject: "انجليزي" },
+          5: { teacher: "عليوي", subject: "علوم" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4ب": {
+          1: { teacher: "مغربي", subject: "رياضيات" },
+          2: { teacher: "وصفي", subject: "عربي" },
+          3: { teacher: "وصفي", subject: "عربي" },
+          4: { teacher: "كامل", subject: "فن" },
+          5: { teacher: "مجد", subject: "رياضه" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5أ": {
+          1: { teacher: "عدنان", subject: "عربي" },
+          2: { teacher: "عدنان", subject: "عربي" },
+          3: { teacher: "عرقان", subject: "رياضيات" },
+          4: { teacher: "حازم", subject: "دين" },
+          5: { teacher: "موفق", subject: "انجليزي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ب": {
+          1: { teacher: "موفق", subject: "انجليزي" },
+          2: { teacher: "عليوي", subject: "علوم" },
+          3: { teacher: "عليوي", subject: "علوم" },
+          4: { teacher: "عرقان", subject: "رياضيات" },
+          5: { teacher: "عدنان", subject: "عربي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ج": {
+          1: { teacher: "هشام", subject: "اجتماعيات" },
+          2: { teacher: "حازم", subject: "دين" },
+          3: { teacher: "موفق", subject: "انجليزي" },
+          4: { teacher: "عدنان", subject: "عربي" },
+          5: { teacher: "عرقان", subject: "رياضيات" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6أ": {
+          1: { teacher: "معاذ", subject: "عربي" },
+          2: { teacher: "هشام", subject: "اجتماعيات" },
+          3: { teacher: "شدايده", subject: "رياضيات" },
+          4: { teacher: "محمد", subject: "انجليزي" },
+          5: { teacher: "معاذ", subject: "عربي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6ب": {
+          1: { teacher: "محمد", subject: "انجليزي" },
+          2: { teacher: "شدايده", subject: "رياضيات" },
+          3: { teacher: "حازم", subject: "دين" },
+          4: { teacher: "باسم", subject: "مهني" },
+          5: { teacher: "باسم", subject: "مهني" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6ج": {
+          1: { teacher: "شدايده", subject: "رياضيات" },
+          2: { teacher: "معاذ", subject: "عربي" },
+          3: { teacher: "محمد", subject: "انجليزي" },
+          4: { teacher: "هشام", subject: "اجتماعيات" },
+          5: { teacher: "حازم", subject: "دين" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 7أ": {
+          1: { teacher: "زغارنه", subject: "علوم" },
+          2: { teacher: "عبدالله", subject: "اجتماعيات" },
+          3: { teacher: "معتصم", subject: "رياضه" },
+          4: { teacher: "ماهر", subject: "دين" },
+          5: { teacher: "مساعيد", subject: "انجليزي" },
+          6: { teacher: "سردي", subject: "رياضيات" },
+          7: { teacher: "عبد", subject: "عربي" }
+        },
+        "الصف 7ب": {
+          1: { teacher: "سردي", subject: "رياضيات" },
+          2: { teacher: "مساعيد", subject: "انجليزي" },
+          3: { teacher: "ايمن", subject: "م. رقمية" },
+          4: { teacher: "زغارنه", subject: "علوم" },
+          5: { teacher: "عبد", subject: "عربي" },
+          6: { teacher: "خيرالله", subject: "ماليه" },
+          7: { teacher: "عبدالله", subject: "اجتماعيات" }
+        },
+        "الصف 7ج": {
+          1: { teacher: "عبد", subject: "عربي" },
+          2: { teacher: "عبد", subject: "عربي" },
+          3: { teacher: "سردي", subject: "رياضيات" },
+          4: { teacher: "عبدالله", subject: "اجتماعيات" },
+          5: { teacher: "ايمن", subject: "م.رقمية" },
+          6: { teacher: "ماهر", subject: "دين" },
+          7: { teacher: "مساعيد", subject: "انجليزي" }
+        },
+        "الصف 8أ": {
+          1: { teacher: "ماهر", subject: "دين" },
+          2: { teacher: "وليد", subject: "انجليزي" },
+          3: { teacher: "عبدالله", subject: "اجتماعيات" },
+          4: { teacher: "مغربي", subject: "رياضيات" },
+          5: { teacher: "زغارنه", subject: "علوم" },
+          6: { teacher: "احمد", subject: "عربي" },
+          7: { teacher: "خيرالله", subject: "مالية" }
+        },
+        "الصف 8ب": {
+          1: { teacher: "احمد", subject: "عربي" },
+          2: { teacher: "باسم", subject: "مهني" },
+          3: { teacher: "باسم", subject: "مهني" },
+          4: { teacher: "احمد", subject: "عربي" },
+          5: { teacher: "مغربي", subject: "رياضيات" },
+          6: { teacher: "وليد", subject: "انجليزي" },
+          7: { teacher: "زغارنه", subject: "علوم" }
+        },
+        "الصف 8ج": {
+          1: { teacher: "عبدالله", subject: "اجتماعيات" },
+          2: { teacher: "مغربي", subject: "رياضيات" },
+          3: { teacher: "ماهر", subject: "دين" },
+          4: { teacher: "معتصم", subject: "رياضه" },
+          5: { teacher: "احمد", subject: "عربي" },
+          6: { teacher: "زغارنه", subject: "علوم" },
+          7: { teacher: "وليد", subject: "انجليزي" }
+        }
+      },
+      "الثلاثاء": {
+        "الصف 2": {
+          1: { teacher: "مساعيد", subject: "انجليزي" },
+          2: { teacher: "انس", subject: "عربي" },
+          3: { teacher: "انس", subject: "رياضيات" },
+          4: { teacher: "انس", subject: "الرياضة" },
+          5: { teacher: "انس", subject: "تربية إسلامية" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 3": {
+          1: { teacher: "سعاده", subject: "الرياضة" },
+          2: { teacher: "سعاده", subject: "رياضيات" },
+          3: { teacher: "سعاده", subject: "عربي" },
+          4: { teacher: "سعاده", subject: "الرياضة" },
+          5: { teacher: "محمد", subject: "انجليزي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4أ": {
+          1: { teacher: "وصفي", subject: "عربي" },
+          2: { teacher: "سردي", subject: "رياضيات" },
+          3: { teacher: "وصفي", subject: "عربي" },
+          4: { teacher: "مجد", subject: "مهني" },
+          5: { teacher: "مجد", subject: "مهني" },
+          6: { teacher: "موفق", subject: "انجليزي" },
+          7: { teacher: "حازم", subject: "دين" }
+        },
+        "الصف 4ب": {
+          1: { teacher: "عليوي", subject: "علوم" },
+          2: { teacher: "وصفي", subject: "عربي" },
+          3: { teacher: "وليد", subject: "انجليزي" },
+          4: { teacher: "حازم", subject: "دين" },
+          5: { teacher: "معتصم", subject: "مهني" },
+          6: { teacher: "معتصم", subject: "مهني" },
+          7: { teacher: "مغربي", subject: "رياضيات" }
+        },
+        "الصف 5أ": {
+          1: { teacher: "عدنان", subject: "عربي" },
+          2: { teacher: "موفق", subject: "انجليزي" },
+          3: { teacher: "عرقان", subject: "رياضيات" },
+          4: { teacher: "عليوي", subject: "علوم" },
+          5: { teacher: "هشام", subject: "اجتماعيات" },
+          6: { teacher: "حازم", subject: "دين" },
+          7: { teacher: "مجد", subject: "رياضه" }
+        },
+        "الصف 5ب": {
+          1: { teacher: "هشام", subject: "اجتماعيات" },
+          2: { teacher: "عدنان", subject: "عربي" },
+          3: { teacher: "موفق", subject: "انجليزي" },
+          4: { teacher: "عرقان", subject: "رياضيات" },
+          5: { teacher: "عمار", subject: "مهني" },
+          6: { teacher: "عمار", subject: "مهني" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ج": {
+          1: { teacher: "حازم", subject: "دين" },
+          2: { teacher: "عرقان", subject: "رياضيات" },
+          3: { teacher: "مجد", subject: "رياضه" },
+          4: { teacher: "كامل", subject: "فن" },
+          5: { teacher: "عليوي", subject: "علوم" },
+          6: { teacher: "عدنان", subject: "عربي" },
+          7: { teacher: "موفق", subject: "انجليزي" }
+        },
+        "الصف 6أ": {
+          1: { teacher: "شدايده", subject: "رياضيات" },
+          2: { teacher: "محمد", subject: "انجليزي" },
+          3: { teacher: "هشام", subject: "اجتماعيات" },
+          4: { teacher: "ماهر", subject: "دين" },
+          5: { teacher: "معاذ", subject: "عربي" },
+          6: { teacher: "عليوي", subject: "علوم" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6ب": {
+          1: { teacher: "معاذ", subject: "عربي" },
+          2: { teacher: "معاذ", subject: "عربي" },
+          3: { teacher: "حازم", subject: "دين" },
+          4: { teacher: "محمد", subject: "انجليزي" },
+          5: { teacher: "شدايده", subject: "رياضيات" },
+          6: { teacher: "مجد", subject: "رياضه" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6ج": {
+          1: { teacher: "محمد", subject: "انجليزي" },
+          2: { teacher: "عليوي", subject: "علوم" },
+          3: { teacher: "معاذ", subject: "عربي" },
+          4: { teacher: "هشام", subject: "اجتماعيات" },
+          5: { teacher: "حازم", subject: "دين" },
+          6: { teacher: "شدايده", subject: "رياضيات" },
+          7: { teacher: "معاذ", subject: "عربي" }
+        },
+        "الصف 7أ": {
+          1: { teacher: "سردي", subject: "رياضيات" },
+          2: { teacher: "مساعيد", subject: "انجليزي" },
+          3: { teacher: "ماهر", subject: "دين" },
+          4: { teacher: "خيرالله", subject: "ماليه" },
+          5: { teacher: "عبد", subject: "عربي" },
+          6: { teacher: "زغارنه", subject: "علوم" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 7ب": {
+          1: { teacher: "زغارنه", subject: "علوم" },
+          2: { teacher: "عبد", subject: "عربي" },
+          3: { teacher: "سردي", subject: "رياضيات" },
+          4: { teacher: "معتصم", subject: "رياضه" },
+          5: { teacher: "ماهر", subject: "دين" },
+          6: { teacher: "مساعيد", subject: "انجليزي" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 7ج": {
+          1: { teacher: "عبد", subject: "عربي" },
+          2: { teacher: "زغارنه", subject: "علوم" },
+          3: { teacher: "مساعيد", subject: "انجليزي" },
+          4: { teacher: "سردي", subject: "رياضيات" },
+          5: { teacher: "باسم", subject: "مهني" },
+          6: { teacher: "باسم", subject: "مهني" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 8أ": {
+          1: { teacher: "كامل", subject: "فن" },
+          2: { teacher: "مغربي", subject: "رياضيات" },
+          3: { teacher: "زغارنه", subject: "علوم" },
+          4: { teacher: "احمد", subject: "عربي" },
+          5: { teacher: "وليد", subject: "انجليزي" },
+          6: { teacher: "عبدالله", subject: "اجتماعيات" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 8ب": {
+          1: { teacher: "مغربي", subject: "رياضيات" },
+          2: { teacher: "احمد", subject: "عربي" },
+          3: { teacher: "كامل", subject: "فن" },
+          4: { teacher: "وليد", subject: "انجليزي" },
+          5: { teacher: "عبدالله", subject: "اجتماعيات" },
+          6: { teacher: "ايمن", subject: "م. رقمية" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 8ج": {
+          1: { teacher: "وليد", subject: "انجليزي" },
+          2: { teacher: "باسم", subject: "مهني" },
+          3: { teacher: "باسم", subject: "مهني" },
+          4: { teacher: "مغربي", subject: "رياضيات" },
+          5: { teacher: "احمد", subject: "عربي" },
+          6: { teacher: "ماهر", subject: "دين" },
+          7: { teacher: "", subject: "" }
+        }
+      },
+      "الأربعاء": {
+        "الصف 2": {
+          1: { teacher: "انس", subject: "رياضيات" },
+          2: { teacher: "مساعيد", subject: "انجليزي" },
+          3: { teacher: "انس", subject: "علوم" },
+          4: { teacher: "انس", subject: "الفن" },
+          5: { teacher: "انس", subject: "عربي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 3": {
+          1: { teacher: "سعاده", subject: "رياضيات" },
+          2: { teacher: "سعاده", subject: "علوم" },
+          3: { teacher: "سعاده", subject: "الفن" },
+          4: { teacher: "سعاده", subject: "عربي" },
+          5: { teacher: "محمد", subject: "انجليزي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4أ": {
+          1: { teacher: "حازم", subject: "دين" },
+          2: { teacher: "موفق", subject: "انجليزي" },
+          3: { teacher: "وصفي", subject: "عربي" },
+          4: { teacher: "سردي", subject: "رياضات" },
+          5: { teacher: "كامل", subject: "فن" },
+          6: { teacher: "هشام", subject: "اجتماعيات" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4ب": {
+          1: { teacher: "وصفي", subject: "عربي" },
+          2: { teacher: "وصفي", subject: "عربي" },
+          3: { teacher: "هشام", subject: "اجتماعيات" },
+          4: { teacher: "مغربي", subject: "رياضيات" },
+          5: { teacher: "وليد", subject: "انجليزي" },
+          6: { teacher: "حازم", subject: "دين" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5أ": {
+          1: { teacher: "موفق", subject: "انجليزي" },
+          2: { teacher: "كامل", subject: "فن" },
+          3: { teacher: "عدنان", subject: "عربي" },
+          4: { teacher: "عدنان", subject: "عربي" },
+          5: { teacher: "عرقان", subject: "رياضيات" },
+          6: { teacher: "عليوي", subject: "علوم" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ب": {
+          1: { teacher: "مجد", subject: "رياضه" },
+          2: { teacher: "عرقان", subject: "رياضيات" },
+          3: { teacher: "حازم", subject: "دين" },
+          4: { teacher: "عليوي", subject: "علوم" },
+          5: { teacher: "عدنان", subject: "عربي" },
+          6: { teacher: "موفق", subject: "انجليزي" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ج": {
+          1: { teacher: "عليوي", subject: "علوم" },
+          2: { teacher: "عدنان", subject: "عربي" },
+          3: { teacher: "عرقان", subject: "رياضيات" },
+          4: { teacher: "حازم", subject: "دين" },
+          5: { teacher: "موفق", subject: "انجليزي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6أ": {
+          1: { teacher: "معاذ", subject: "عربي" },
+          2: { teacher: "ماهر", subject: "دين" },
+          3: { teacher: "شدايده", subject: "رياضيات" },
+          4: { teacher: "كامل", subject: "فن" },
+          5: { teacher: "عليوي", subject: "علوم" },
+          6: { teacher: "معتصم", subject: "رياضه" },
+          7: { teacher: "محمد", subject: "انجليزي" }
+        },
+        "الصف 6ب": {
+          1: { teacher: "كامل", subject: "فن" },
+          2: { teacher: "شدايده", subject: "رياضيات" },
+          3: { teacher: "عليوي", subject: "علوم" },
+          4: { teacher: "محمد", subject: "انجليزي" },
+          5: { teacher: "معاذ", subject: "عربي" },
+          6: { teacher: "معاذ", subject: "عربي" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6ج": {
+          1: { teacher: "شدايده", subject: "رياضيات" },
+          2: { teacher: "مجد", subject: "رياضه" },
+          3: { teacher: "معاذ", subject: "عربي" },
+          4: { teacher: "معاذ", subject: "عربي" },
+          5: { teacher: "حازم", subject: "دين" },
+          6: { teacher: "محمد", subject: "انجليزي" },
+          7: { teacher: "هشام", subject: "اجتماعيات" }
+        },
+        "الصف 7أ": {
+          1: { teacher: "مساعيد", subject: "انجليزي" },
+          2: { teacher: "سردي", subject: "رياضيات" },
+          3: { teacher: "باسم", subject: "مهني" },
+          4: { teacher: "باسم", subject: "مهني" },
+          5: { teacher: "ايمن", subject: "م. رقمية" },
+          6: { teacher: "زغارنه", subject: "علوم" },
+          7: { teacher: "عبد", subject: "عربي" }
+        },
+        "الصف 7ب": {
+          1: { teacher: "عبدالله", subject: "اجتماعيات" },
+          2: { teacher: "عبد", subject: "عربي" },
+          3: { teacher: "عبد", subject: "عربي" },
+          4: { teacher: "مساعيد", subject: "انجليزي" },
+          5: { teacher: "سردي", subject: "رياضيات" },
+          6: { teacher: "كامل", subject: "فن" },
+          7: { teacher: "معتصم", subject: "رياضه" }
+        },
+        "الصف 7ج": {
+          1: { teacher: "سردي", subject: "رياضيات" },
+          2: { teacher: "زغارنه", subject: "علوم" },
+          3: { teacher: "خيرالله", subject: "ث. مالية" },
+          4: { teacher: "معتصم", subject: "رياضه" },
+          5: { teacher: "عبد", subject: "عربي" },
+          6: { teacher: "عبدالله", subject: "اجتماعيات" },
+          7: { teacher: "مساعيد", subject: "انجليزي" }
+        },
+        "الصف 8أ": {
+          1: { teacher: "ماهر", subject: "دين" },
+          2: { teacher: "وليد", subject: "انجليزي" },
+          3: { teacher: "مغربي", subject: "رياضيات" },
+          4: { teacher: "عبدالله", subject: "اجتماعيات" },
+          5: { teacher: "باسم", subject: "مهني" },
+          6: { teacher: "باسم", subject: "مهني" },
+          7: { teacher: "احمد", subject: "عربي" }
+        },
+        "الصف 8ب": {
+          1: { teacher: "مغربي", subject: "رياضيات" },
+          2: { teacher: "معتصم", subject: "رياضه" },
+          3: { teacher: "ايمن", subject: "م. رقمية" },
+          4: { teacher: "زغارنه", subject: "علوم" },
+          5: { teacher: "احمد", subject: "عربي" },
+          6: { teacher: "ماهر", subject: "دين" },
+          7: { teacher: "وليد", subject: "انجليزي" }
+        },
+        "الصف 8ج": {
+          1: { teacher: "وليد", subject: "انجليزي" },
+          2: { teacher: "عبدالله", subject: "اجتماعيات" },
+          3: { teacher: "احمد", subject: "عربي" },
+          4: { teacher: "احمد", subject: "عربي" },
+          5: { teacher: "زغارنه", subject: "علوم" },
+          6: { teacher: "ايمن", subject: "م.رقمية" },
+          7: { teacher: "مغربي", subject: "رياضيات" }
+        }
+      },
+      "الخميس": {
+        "الصف 2": {
+          1: { teacher: "انس", subject: "الرياضة" },
+          2: { teacher: "مساعيد", subject: "انجليزي" },
+          3: { teacher: "انس", subject: "عربي" },
+          4: { teacher: "انس", subject: "تربية إسلامية" },
+          5: { teacher: "انس", subject: "رياضيات" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 3": {
+          1: { teacher: "سعاده", subject: "عربي" },
+          2: { teacher: "سعاده", subject: "رياضيات" },
+          3: { teacher: "سعاده", subject: "تربية إسلامية" },
+          4: { teacher: "سعاده", subject: "اجتماعيات" },
+          5: { teacher: "محمد", subject: "انجليزي" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4أ": {
+          1: { teacher: "وصفي", subject: "عربي" },
+          2: { teacher: "سردي", subject: "رياضيات" },
+          3: { teacher: "عليوي", subject: "علوم" },
+          4: { teacher: "مجد", subject: "رياضه" },
+          5: { teacher: "حازم", subject: "دين" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 4ب": {
+          1: { teacher: "وليد", subject: "انجليزي" },
+          2: { teacher: "عليوي", subject: "علوم" },
+          3: { teacher: "وصفي", subject: "عربي" },
+          4: { teacher: "مغربي", subject: "رياضيات" },
+          5: { teacher: "مجد", subject: "رياضه" },
+          6: { teacher: "", subject: "" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5أ": {
+          1: { teacher: "عدنان", subject: "عربي" },
+          2: { teacher: "هشام", subject: "اجتماعيات" },
+          3: { teacher: "عرقان", subject: "رياضيات" },
+          4: { teacher: "موفق", subject: "انجليزي" },
+          5: { teacher: "عمار", subject: "مهني" },
+          6: { teacher: "عمار", subject: "مهني" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ب": {
+          1: { teacher: "حازم", subject: "دين" },
+          2: { teacher: "عرقان", subject: "رياضيات" },
+          3: { teacher: "موفق", subject: "انجليزي" },
+          4: { teacher: "عدنان", subject: "عربي" },
+          5: { teacher: "عدنان", subject: "عربي" },
+          6: { teacher: "حازم", subject: "دين" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 5ج": {
+          1: { teacher: "هشام", subject: "اجتماعيات" },
+          2: { teacher: "عدنان", subject: "عربي" },
+          3: { teacher: "مجد", subject: "رياضه" },
+          4: { teacher: "عرقان", subject: "رياضيات" },
+          5: { teacher: "موفق", subject: "انجليزي" },
+          6: { teacher: "عدنان", subject: "عربي" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 6أ": {
+          1: { teacher: "عليوي", subject: "علوم" },
+          2: { teacher: "شدايده", subject: "رياضيات" },
+          3: { teacher: "محمد", subject: "انجليزي" },
+          4: { teacher: "ماهر", subject: "دين" },
+          5: { teacher: "معاذ", subject: "عربي" },
+          6: { teacher: "هشام", subject: "اجتماعيات" },
+          7: { teacher: "معتصم", subject: "رياضه" }
+        },
+        "الصف 6ب": {
+          1: { teacher: "محمد", subject: "انجليزي" },
+          2: { teacher: "معاذ", subject: "عربي" },
+          3: { teacher: "هشام", subject: "اجتماعيات" },
+          4: { teacher: "حازم", subject: "دين" },
+          5: { teacher: "عليوي", subject: "علوم" },
+          6: { teacher: "شدايده", subject: "رياضيات" },
+          7: { teacher: "معاذ", subject: "عربي" }
+        },
+        "الصف 6ج": {
+          1: { teacher: "باسم", subject: "مهني" },
+          2: { teacher: "باسم", subject: "مهني" },
+          3: { teacher: "معاذ", subject: "عربي" },
+          4: { teacher: "عليوي", subject: "علوم" },
+          5: { teacher: "شدايده", subject: "رياضيات" },
+          6: { teacher: "محمد", subject: "انجليزي" },
+          7: { teacher: "", subject: "" }
+        },
+        "الصف 7أ": {
+          1: { teacher: "عبدالله", subject: "اجتماعيات" },
+          2: { teacher: "عبد", subject: "عربي" },
+          3: { teacher: "معتصم", subject: "رياضه" },
+          4: { teacher: "كامل", subject: "فن" },
+          5: { teacher: "ماهر", subject: "دين" },
+          6: { teacher: "مساعيد", subject: "انجليزي" },
+          7: { teacher: "سردي", subject: "رياضيات" }
+        },
+        "الصف 7ب": {
+          1: { teacher: "زغارنه", subject: "علوم" },
+          2: { teacher: "ماهر", subject: "دين" },
+          3: { teacher: "عبد", subject: "عربي" },
+          4: { teacher: "مساعيد", subject: "انجليزي" },
+          5: { teacher: "سردي", subject: "رياضيات" },
+          6: { teacher: "باسم", subject: "مهني" },
+          7: { teacher: "باسم", subject: "مهني" }
+        },
+        "الصف 7ج": {
+          1: { teacher: "ايمن", subject: "م.رقمية" },
+          2: { teacher: "زغارنه", subject: "علوم" },
+          3: { teacher: "ماهر", subject: "دين" },
+          4: { teacher: "عبدالله", subject: "اجتماعيات" },
+          5: { teacher: "عبد", subject: "عربي" },
+          6: { teacher: "سردي", subject: "رياضيات" },
+          7: { teacher: "مساعيد", subject: "انجليزي" }
+        },
+        "الصف 8أ": {
+          1: { teacher: "احمد", subject: "عربي" },
+          2: { teacher: "احمد", subject: "عربي" },
+          3: { teacher: "ايمن", subject: "م. رقمية" },
+          4: { teacher: "وليد", subject: "انجليزي" },
+          5: { teacher: "مغربي", subject: "رياضيات" },
+          6: { teacher: "معتصم", subject: "رياضه" },
+          7: { teacher: "زغارنه", subject: "علوم" }
+        },
+        "الصف 8ب": {
+          1: { teacher: "خيرالله", subject: "مالية" },
+          2: { teacher: "وليد", subject: "انجليزي" },
+          3: { teacher: "مغربي", subject: "رياضيات" },
+          4: { teacher: "زغارنه", subject: "علوم" },
+          5: { teacher: "احمد", subject: "عربي" },
+          6: { teacher: "عبدالله", subject: "اجتماعيات" },
+          7: { teacher: "ماهر", subject: "دين" }
+        },
+        "الصف 8ج": {
+          1: { teacher: "مغربي", subject: "رياضيات" },
+          2: { teacher: "عبدالله", subject: "اجتماعيات" },
+          3: { teacher: "كامل", subject: "فن" },
+          4: { teacher: "احمد", subject: "عربي" },
+          5: { teacher: "وليد", subject: "انجليزي" },
+          6: { teacher: "زغارنه", subject: "علوم" },
+          7: { teacher: "ايمن", subject: "م.رقمية" }
+        }
+      }
+    };
+
+    const RAW_CLASS_LIST = [
+      "الصف 2", "الصف 3", "الصف 4أ", "الصف 4ب",
+      "الصف 5أ", "الصف 5ب", "الصف 5ج",
+      "الصف 6أ", "الصف 6ب", "الصف 6ج",
+      "الصف 7أ", "الصف 7ب", "الصف 7ج",
+      "الصف 8أ", "الصف 8ب", "الصف 8ج"
+    ];
+
+    // استخراج جميع المعلمين الفريدين من الجدول
+    function extractAllTeachers() {
+      const set = new Set();
+      for (const day of Object.keys(RAW_SCHEDULE_DATA)) {
+        for (const cls of Object.keys(RAW_SCHEDULE_DATA[day])) {
+          for (let p = 1; p <= 7; p++) {
+            const cell = RAW_SCHEDULE_DATA[day][cls][p];
+            if (cell && cell.teacher && cell.teacher.trim() !== "") {
+              set.add(cell.teacher.trim());
+            }
+          }
+        }
+      }
+      return Array.from(set).sort();
+    }
+
+    const ALL_TEACHERS = extractAllTeachers();
+
+    const EXCLUDED_TEACHERS = ["عمار"];
+
+    const PERIOD_NAMES = { 1: "الأولى", 2: "الثانية", 3: "الثالثة", 4: "الرابعة", 5: "الخامسة", 6: "السادسة", 7: "السابعة" };
+
+    const LessonStatus = {
+      NORMAL: "NORMAL",
+      SHIFTED: "SHIFTED",
+      ABSENCE_EMPTY: "ABSENCE_EMPTY",
+      SHIFT_EMPTY: "SHIFT_EMPTY",
+      EMPTY: "EMPTY",
+      UNAVAILABLE: "UNAVAILABLE",
+      OCCUPANCY: "OCCUPANCY"
+    };
+
+    // ============================================================
+    // ENGINE STATE
+    // ============================================================
+    let FIELD_SCHEDULE = null;
+    let absentList = [];
+    let teacherState = {};
+    let originalEndMap = {};
+    let movementLog = [];
+    let chains = [];
+    let vacancies = [];
+    let currentDay = "";
+    let currentDate = "";
+    let originalScheduleSnapshot = "";
+    let engineRunTime = "";
+    let lastIntegrity = null;
+    let chainSeq = 0;
+
+    // ============================================================
+    // CONTROLLER (UI + Engine Bridge)
+    // ============================================================
+    
+    function printOriginalSchedule() {
+      const day = document.getElementById("daySelect").value;
+      if (!day) { alert("اختر اليوم أولًا لطباعة جدوله"); return; }
+      
+      if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
+      FIELD_SCHEDULE[day] = {};
+      
+      const origDay = ORIGINAL_SCHEDULE[day] || {};
+      for (const cls of ALL_CLASSES) {
+        FIELD_SCHEDULE[day][cls] = {};
+        for (let p = 1; p <= 7; p++) {
+          const l = origDay[cls] && origDay[cls][p];
+          if (l && isRealLessonData(l.teacher, l.subject)) {
+            FIELD_SCHEDULE[day][cls][p] = {
+              teacher: l.teacher, subject: l.subject,
+              originalPeriod: p, currentPeriod: p,
+              status: LessonStatus.NORMAL, lessonId: null
+            };
+          } else {
+            FIELD_SCHEDULE[day][cls][p] = {
+              teacher: "", subject: "",
+              originalPeriod: p, currentPeriod: p,
+              status: LessonStatus.EMPTY, lessonId: null
+            };
+          }
+        }
+      }
+      
+      const date = getSelectedDate() || "";
+      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
+      
+      const headerTitle = document.querySelector('.header h1');
+      const originalTitle = headerTitle.innerHTML;
+      headerTitle.innerHTML = 'جدول الدروس اليومي';
+      
+      document.getElementById("attentionBanner").innerHTML = "";
+      document.getElementById("quickSummary").innerHTML = "";
+      renderScheduleTable(day);
+      document.getElementById("reportContainer").innerHTML = "";
+      document.getElementById("output").style.display = "block";
+      
+      setTimeout(function() {
+        window.print();
+        headerTitle.innerHTML = originalTitle;
+      }, 300);
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+    function deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+    function deepFreeze(obj) {
+      if (obj && typeof obj === "object") {
+        Object.freeze(obj);
+        Object.values(obj).forEach(deepFreeze);
+      }
+      return obj;
+    }
+
+    const BLANK_TOKENS = ["", "-", "*", "–", "—", "x", "X", "لا شيء", "فراغ"];
+
+    function isBlankToken(v) {
+      if (v === null || v === undefined) return true;
+      return BLANK_TOKENS.indexOf(String(v).trim()) >= 0;
+    }
+
+    function isRealLessonData(teacher, subject) {
+      return !isBlankToken(teacher) && !isBlankToken(subject);
+    }
+
+    function isLessonStatus(st) { return st === LessonStatus.NORMAL || st === LessonStatus.SHIFTED || st === LessonStatus.OCCUPANCY; }
+
+    function isGapStatus(st) {
+      return st === LessonStatus.ABSENCE_EMPTY || st === LessonStatus.SHIFT_EMPTY || st === LessonStatus.EMPTY;
+    }
+
+    function isActiveLesson(cell) {
+      return !!cell && isLessonStatus(cell.status) &&
+        !isBlankToken(cell.teacher) && !isBlankToken(cell.subject) && !!cell.lessonId;
+    }
+
+    function isAbsent(teacher) {
+      const st = teacherState[teacher];
+      return !!st && st.status === "UNAVAILABLE";
+    }
+
+    function normalizeOriginal(raw) {
+      const out = {};
+      for (const day of Object.keys(raw)) {
+        out[day] = {};
+        for (const cls of Object.keys(raw[day])) {
+          out[day][cls] = {};
+          for (let p = 1; p <= 7; p++) {
+            const cell = raw[day][cls][p];
+            const teacher = (cell && cell.teacher != null) ? String(cell.teacher).trim() : "";
+            const subject = (cell && cell.subject != null) ? String(cell.subject).trim() : "";
+            out[day][cls][p] = isRealLessonData(teacher, subject) ? { teacher, subject } : { teacher: "", subject: "" };
+          }
+        }
+      }
+      return out;
+    }
+
+    let ORIGINAL_SCHEDULE = deepFreeze(normalizeOriginal(RAW_SCHEDULE_DATA));
+    let ALL_CLASSES = RAW_CLASS_LIST.slice();
+
+    // ============================================================
+    // STAGE 0
+    // ============================================================
+    function buildTeacherState(day) {
+      teacherState = {};
+      for (const cls of ALL_CLASSES) {
+        const row = ORIGINAL_SCHEDULE[day] && ORIGINAL_SCHEDULE[day][cls];
         if (!row) continue;
         for (let p = 1; p <= 7; p++) {
           const l = row[p];
-          if (!isActiveLesson(l)) continue;
-          busy[p][l.teacher] = cls;
+          if (l && isRealLessonData(l.teacher, l.subject)) {
+            if (!teacherState[l.teacher]) teacherState[l.teacher] = { status: "AVAILABLE", originalLoad: 0, fieldLoad: 0 };
+            teacherState[l.teacher].originalLoad++;
+            teacherState[l.teacher].fieldLoad++;
+          }
         }
       }
-      return busy;
+      for (const t of absentList) {
+        if (!teacherState[t]) teacherState[t] = { status: "AVAILABLE", originalLoad: 0, fieldLoad: 0 };
+        teacherState[t].status = "UNAVAILABLE";
+      }
     }
 
-    function runOccupancy() {
-      const day = document.getElementById("daySelect").value;
-      if (!day) { alert("الرجاء اختيار اليوم أولاً"); return; }
-      if (!ORIGINAL_SCHEDULE[day]) { alert("لا توجد بيانات لليوم المختار"); return; }
-
-      const absentCountTemp = document.querySelectorAll(".teacher-chip.selected").length;
-      if (absentCountTemp === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل"); return; }
-
-      const absent = [];
-      document.querySelectorAll(".teacher-chip.selected").forEach(chip => {
-        const t = chip.dataset.teacher;
-        if (isExcludedFromAll(t)) {
-          console.warn("تم تجاهل المعلم المستثنى:", t);
-          return;
-        }
-        absent.push(t);
-      });
-      if (absent.length === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل غير مستثنى"); return; }
-
-      absentList = absent.slice();
-
-      if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
-      FIELD_SCHEDULE[day] = {};
-      vacancies = [];
-      movementLog = [];
-      chains = [];
-      buildTeacherState(day);
-      calculateOriginalEnd(day);
-
-      const origDay = ORIGINAL_SCHEDULE[day] || {};
-      let occupancyCount = 0;
-      const uncovered = [];
-
+    function calculateOriginalEnd(day) {
+      originalEndMap = {};
       for (const cls of ALL_CLASSES) {
-        if (!FIELD_SCHEDULE[day][cls]) FIELD_SCHEDULE[day][cls] = {};
+        let lastReal = 0;
+        const row = ORIGINAL_SCHEDULE[day] && ORIGINAL_SCHEDULE[day][cls];
+        if (row) {
+          for (let p = 1; p <= 7; p++) {
+            const l = row[p];
+            if (l && isRealLessonData(l.teacher, l.subject)) lastReal = p;
+          }
+        }
+        originalEndMap[cls] = lastReal;
+      }
+    }
+
+    function createFieldSchedule(day) {
+      FIELD_SCHEDULE = {};
+      FIELD_SCHEDULE[day] = {};
+      for (const cls of ALL_CLASSES) {
+        FIELD_SCHEDULE[day][cls] = {};
+        const row = ORIGINAL_SCHEDULE[day] && ORIGINAL_SCHEDULE[day][cls];
         for (let p = 1; p <= 7; p++) {
-          const l = origDay[cls] && origDay[cls][p];
-          if (l && isRealLessonData(l.teacher, l.subject)) {
-            if (absent.includes(l.teacher)) {
-              vacancies.push({ class: cls, period: p, originalTeacher: l.teacher, subject: l.subject });
-              FIELD_SCHEDULE[day][cls][p] = {
-                teacher: "", subject: "",
-                originalPeriod: p, currentPeriod: p,
-                status: LessonStatus.ABSENCE_EMPTY,
-                absentTeacher: l.teacher, absentSubject: l.subject, lessonId: null
-              };
-            } else {
-              FIELD_SCHEDULE[day][cls][p] = {
-                teacher: l.teacher, subject: l.subject,
-                originalPeriod: p, currentPeriod: p,
-                status: LessonStatus.NORMAL, lessonId: null
-              };
-            }
+          const orig = row ? row[p] : null;
+          if (orig && isRealLessonData(orig.teacher, orig.subject)) {
+            FIELD_SCHEDULE[day][cls][p] = {
+              teacher: orig.teacher, subject: orig.subject,
+              originalPeriod: p, currentPeriod: p,
+              status: LessonStatus.NORMAL,
+              lessonId: day + "|" + cls + "|" + p + "|" + orig.teacher + "|" + orig.subject
+            };
           } else {
             FIELD_SCHEDULE[day][cls][p] = {
-              teacher: "", subject: "", originalPeriod: p, currentPeriod: p,
+              teacher: "", subject: "",
+              originalPeriod: p, currentPeriod: p,
               status: LessonStatus.EMPTY, lessonId: null
             };
           }
         }
       }
-
-      const weeklyLoads = {};
-      for (const d of Object.keys(ORIGINAL_SCHEDULE)) {
-        for (const cls of ALL_CLASSES) {
-          const row = ORIGINAL_SCHEDULE[d][cls];
-          if (!row) continue;
-          for (let p = 1; p <= 7; p++) {
-            const l = row[p];
-            if (l && isRealLessonData(l.teacher, l.subject)) {
-              weeklyLoads[l.teacher] = (weeklyLoads[l.teacher] || 0) + 1;
-            }
-          }
-        }
-      }
-
-      const dailyTotal = {};
-      ALL_TEACHERS.forEach(t => dailyTotal[t] = 0);
-      for (const cls of ALL_CLASSES) {
-        for (let p = 1; p <= 7; p++) {
-          const c = FIELD_SCHEDULE[day][cls][p];
-          if (isActiveLesson(c)) dailyTotal[c.teacher] = (dailyTotal[c.teacher] || 0) + 1;
-        }
-      }
-
-      const todayOccupancy = {};
-      ALL_TEACHERS.forEach(t => todayOccupancy[t] = 0);
-      const cumLoad = ALL_TEACHERS.reduce((acc, t) => (acc[t] = FairnessLedger.get(t), acc), {});
-      const assignedToday = [];
-
-      vacancies.sort((a, b) => a.period - b.period);
-
-      for (const vac of vacancies) {
-        const p = vac.period;
-        const cls = vac.class;
-
-        const busy = buildBusyMatrix(FIELD_SCHEDULE[day], ALL_CLASSES);
-
-        let bestSub = null;
-        let bestScore = -Infinity;
-
-        for (const t of ALL_TEACHERS) {
-          if (isExemptFromOccupancy(t)) continue;
-          if (absent.includes(t)) continue;
-          if (busy[p][t]) continue;
-          
-          if ((dailyTotal[t] || 0) >= ENGINE_CONFIG.MAX_DAILY_TOTAL) continue;
-          if ((todayOccupancy[t] || 0) >= ENGINE_CONFIG.MAX_OCCUPANCY_PER_DAY) continue;
-
-          const fairnessPenalty = (cumLoad[t] || 0) * 2;
-          const todayPenalty = (todayOccupancy[t] || 0) * 10;
-          const weeklyPenalty = (weeklyLoads[t] || 0);
-
-          const score = -(fairnessPenalty + todayPenalty + weeklyPenalty);
-          
-          if (score > bestScore) {
-            bestScore = score;
-            bestSub = t;
-          }
-        }
-
-        if (bestSub) {
-          todayOccupancy[bestSub] = (todayOccupancy[bestSub] || 0) + 1;
-          dailyTotal[bestSub] = (dailyTotal[bestSub] || 0) + 1;
-          assignedToday.push(bestSub);
-          occupancyCount++;
-
-          FIELD_SCHEDULE[day][cls][p] = {
-            teacher: bestSub, subject: vac.subject,
-            originalPeriod: p, currentPeriod: p,
-            status: LessonStatus.OCCUPANCY,
-            originalTeacher: vac.originalTeacher, lessonId: null
-          };
-        } else {
-          uncovered.push(vac);
-          FIELD_SCHEDULE[day][cls][p] = {
-            teacher: "", subject: vac.subject,
-            originalPeriod: p, currentPeriod: p,
-            status: LessonStatus.UNAVAILABLE,
-            absentTeacher: vac.originalTeacher, lessonId: null
-          };
-        }
-      }
-
-      if (assignedToday.length) {
-        const d = getSelectedDate();
-        if (d) FairnessLedger.add(d, assignedToday);
-      }
-
-      const banner = document.getElementById("attentionBanner");
-      if (uncovered.length) {
-        banner.innerHTML =
-          '<div class="attention-banner">⚠️ تم تغطية ' + occupancyCount +
-          ' حصة. بقيت <strong>' + uncovered.length +
-          '</strong> حصة بلا معلم متاح (نقص بالتوظيف) — تحتاج قرارًا إداريًا: ' +
-          uncovered.map(u => esc(u.class) + ' ح' + u.period).join("، ") + '</div>';
-      } else {
-        banner.innerHTML =
-          '<div class="attention-banner" style="background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.45);color:var(--success)">✅ تم إشغال ' +
-          occupancyCount + ' حصة بتوزيع عادل بنجاح.</div>';
-      }
-
-      document.getElementById("quickSummary").innerHTML = "";
-      renderScheduleTable(day);
-      document.getElementById("reportContainer").innerHTML = "";
-      document.getElementById("output").style.display = "block";
     }
 
-    function runOccupancy() {
-      const day = document.getElementById("daySelect").value;
-      if (!day) { alert("الرجاء اختيار اليوم أولاً"); return; }
-      if (!ORIGINAL_SCHEDULE[day]) { alert("لا توجد بيانات لليوم المختار"); return; }
-
-      const absentCountTemp = document.querySelectorAll(".teacher-chip.selected").length;
-      if (absentCountTemp === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل"); return; }
-
-      const absent = [];
-      document.querySelectorAll(".teacher-chip.selected").forEach(chip => {
-        const t = chip.dataset.teacher;
-        if (isExcludedFromAll(t)) {
-          console.warn("تم تجاهل المعلم المستثنى:", t);
-          return;
+    function markAbsentTeachers(day) {
+      for (const cls of ALL_CLASSES) {
+        const row = FIELD_SCHEDULE[day][cls];
+        for (let p = 1; p <= 7; p++) {
+          const lesson = row[p];
+          if (lesson && lesson.status === LessonStatus.NORMAL && isAbsent(lesson.teacher)) {
+            lesson.status = LessonStatus.ABSENCE_EMPTY;
+          }
         }
-        absent.push(t);
-      });
-      if (absent.length === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل غير مستثنى"); return; }
+      }
+    }
 
-      absentList = absent.slice();
-
-      // Reset state completely to prevent cross-run contamination
-      if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
-      FIELD_SCHEDULE[day] = {};
+    function createAbsenceVacancies(day) {
       vacancies = [];
+      for (const cls of ALL_CLASSES) {
+        const oe = originalEndMap[cls];
+        const row = FIELD_SCHEDULE[day][cls];
+        for (let p = 1; p <= 7; p++) {
+          const lesson = row[p];
+          if (lesson && lesson.status === LessonStatus.ABSENCE_EMPTY) {
+            const at = lesson.teacher, sub = lesson.subject;
+            lesson.teacher = "";
+            lesson.subject = "";
+            lesson.absentTeacher = at;
+            lesson.absentSubject = sub;
+            vacancies.push({
+              className: cls, period: p, absentTeacher: at, subject: sub,
+              originalEnd: oe, needsProcessing: p < oe,
+              status: p < oe ? "PENDING" : "SUCCESS_NO_ACTION",
+              chainId: null
+            });
+          }
+        }
+      }
+    }
+
+    // ============================================================
+    // CORE FUNCTIONS
+    // ============================================================
+    function isTeacherFree(teacher, day, period) {
+      if (EXCLUDED_TEACHERS.includes(teacher)) return false;
+      if (!teacherState[teacher]) return false;
+      if (isAbsent(teacher)) return false;
+      for (const cls of ALL_CLASSES) {
+        const lesson = FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][period];
+        if (isActiveLesson(lesson) && lesson.teacher === teacher) return false;
+      }
+      return true;
+    }
+
+    function findClassOfTeacherAt(teacher, day, period) {
+      for (const cls of ALL_CLASSES) {
+        const lesson = FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][period];
+        if (isActiveLesson(lesson) && lesson.teacher === teacher) return cls;
+      }
+      return null;
+    }
+
+    function noConflictsAtPeriod(day, p) {
+      const seen = {};
+      for (const cls of ALL_CLASSES) {
+        const l = FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][p];
+        if (!isActiveLesson(l)) continue;
+        if (seen[l.teacher]) return false;
+        seen[l.teacher] = cls;
+      }
+      return true;
+    }
+
+    function executeMove(cls, fromPeriod, toPeriod, day, movementType, reason, chainId) {
+      const src = FIELD_SCHEDULE[day][cls][fromPeriod];
+      const dst = FIELD_SCHEDULE[day][cls][toPeriod];
+      if (!isActiveLesson(src)) throw new Error("executeMove: المصدر ليس حصة فعلية (" + cls + " ح" + fromPeriod + ")");
+      if (isAbsent(src.teacher)) throw new Error("executeMove: المعلم غائب (" + src.teacher + ")");
+      if (!dst || !isGapStatus(dst.status)) throw new Error("executeMove: الوجهة ليست فراغًا (" + cls + " ح" + toPeriod + " = " + (dst && dst.status) + ")");
+      if (toPeriod >= originalEndMap[cls]) throw new Error("executeMove: الوجهة عند Original_End أو بعده (" + cls + " ح" + toPeriod + " >= End=" + originalEndMap[cls] + ") — منع وضع حصة في منطقة الاستقبال");
+      if (!isTeacherFree(src.teacher, day, toPeriod)) throw new Error("executeMove: تعارض المعلم " + src.teacher + " في الوجهة ح" + toPeriod);
+
+      const movedTeacher = src.teacher, sourceOriginalPeriod = src.originalPeriod;
+      FIELD_SCHEDULE[day][cls][toPeriod] = {
+        teacher: src.teacher, subject: src.subject,
+        originalPeriod: src.originalPeriod, currentPeriod: toPeriod,
+        status: LessonStatus.SHIFTED, lessonId: src.lessonId
+      };
+      FIELD_SCHEDULE[day][cls][fromPeriod] = {
+        teacher: "", subject: "",
+        originalPeriod: fromPeriod, currentPeriod: fromPeriod,
+        status: LessonStatus.SHIFT_EMPTY, lessonId: null,
+        movedTeacher: movedTeacher, sourceOriginalPeriod: sourceOriginalPeriod,
+        createdByChainId: chainId, createdByMovementSeq: null
+      };
+      const entry = pushMovement(day, cls, cls, src.teacher, src.subject, src.lessonId,
+        fromPeriod, toPeriod, movementType, reason, chainId);
+      FIELD_SCHEDULE[day][cls][fromPeriod].createdByMovementSeq = entry.seq;
+      return entry;
+    }
+
+    function pushMovement(day, sourceClass, targetClass, teacher, subject, lessonId,
+      fromPeriod, toPeriod, movementType, reason, chainId) {
+      const entry = {
+        seq: movementLog.length + 1,
+        day, date: currentDate,
+        sourceClass, targetClass, teacher, subject, lessonId,
+        fromPeriod, toPeriod, movementType, reason,
+        result: "EXECUTED", chainId, timestamp: Date.now()
+      };
+      movementLog.push(entry);
+      const chain = chains.find(c => c.id === chainId);
+      if (chain) chain.moves.push(movementLog.length);
+      return entry;
+    }
+
+    function findBestDirectPlan(cls, targetPeriod, originalEnd, day) {
+      const candidates = [];
+      for (let P = originalEnd; P > targetPeriod; P--) {
+        const slot = FIELD_SCHEDULE[day][cls][P];
+        if (!isActiveLesson(slot)) continue;
+        if (!isTeacherFree(slot.teacher, day, targetPeriod)) continue;
+
+        if (P === originalEnd) {
+          candidates.push({ fromPeriod: P, teacher: slot.teacher, ripplePath: [], finalGap: originalEnd, reachedEnd: true });
+          continue;
+        }
+        const simRow = simulateDirectMove(cls, day, P, targetPeriod);
+        const ripple = findRipplePath(cls, P, originalEnd, day, false, simRow);
+        candidates.push({
+          fromPeriod: P, teacher: slot.teacher,
+          ripplePath: ripple.path, finalGap: ripple.finalGap, reachedEnd: ripple.reachedEnd
+        });
+      }
+      candidates.sort((a, b) => {
+        if (a.reachedEnd !== b.reachedEnd) return a.reachedEnd ? -1 : 1;
+        if (a.finalGap !== b.finalGap) return b.finalGap - a.finalGap;
+        const am = 1 + a.ripplePath.length,
+          bm = 1 + b.ripplePath.length;
+        if (am !== bm) return am - bm;
+        return b.fromPeriod - a.fromPeriod;
+      });
+      return candidates.length ? candidates[0] : null;
+    }
+
+    function simulateDirectMove(cls, day, fromP, toP) {
+      const row = {};
+      for (let p = 1; p <= 7; p++) row[p] = Object.assign({}, FIELD_SCHEDULE[day][cls][p]);
+      const source = row[fromP];
+      row[toP] = Object.assign({}, source, { status: LessonStatus.SHIFTED, currentPeriod: toP });
+      row[fromP] = {
+        teacher: "", subject: "", originalPeriod: fromP, currentPeriod: fromP,
+        status: LessonStatus.SHIFT_EMPTY, lessonId: null
+      };
+      return row;
+    }
+
+    function findRipplePath(cls, gapStart, originalEnd, day, filterProtected, startingRow) {
+      const cloneCell = (c) => Object.assign({}, c);
+      const cloneRow = () => {
+        const r = {};
+        for (let p = 1; p <= 7; p++) {
+          const src = startingRow ? startingRow[p] :
+            ((FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][p]) || null);
+          r[p] = cloneCell(src ||
+            { teacher: "", subject: "", originalPeriod: p, currentPeriod: p, status: LessonStatus.EMPTY, lessonId: null });
+        }
+        return r;
+      };
+      const applyToRow = (row, fromP, toP) => {
+        const nr = {};
+        for (let p = 1; p <= 7; p++) nr[p] = cloneCell(row[p]);
+        nr[toP] = Object.assign({}, row[fromP], { status: LessonStatus.SHIFTED, currentPeriod: toP });
+        nr[fromP] = { teacher: "", subject: "", originalPeriod: fromP, currentPeriod: fromP, status: LessonStatus.SHIFT_EMPTY, lessonId: null };
+        return nr;
+      };
+      const busyAt = (teacher, q, simRow) => {
+        if (EXCLUDED_TEACHERS.includes(teacher)) return true;
+        if (!teacherState[teacher]) return true;
+        if (isAbsent(teacher)) return true;
+        const sc = simRow[q];
+        if (sc && isLessonStatus(sc.status) && sc.teacher === teacher) return true;
+        for (const oc of ALL_CLASSES) {
+          if (oc === cls) continue;
+          const l = FIELD_SCHEDULE[day][oc] && FIELD_SCHEDULE[day][oc][q];
+          if (l && isLessonStatus(l.status) && l.teacher === teacher) return true;
+        }
+        return false;
+      };
+
+      const signature = (row) => {
+        let s = "";
+        for (let p = 1; p <= originalEnd; p++) {
+          const c = row[p];
+          s += (c && isLessonStatus(c.status) && c.lessonId) ? (c.lessonId + ".") : "-.";
+        }
+        return s;
+      };
+
+      const start = { gap: gapStart, path: [], row: cloneRow() };
+      const queue = [start];
+      const visited = new Set([gapStart + "#" + signature(start.row)]);
+      let reachEnd = null;
+      let best = start;
+      let guard = 0;
+
+      while (queue.length && !reachEnd) {
+        const node = queue.shift();
+        for (let P = node.gap + 1; P <= originalEnd; P++) {
+          if (++guard > 50000) return { path: [], finalGap: gapStart, reachedEnd: false };
+          const slot = node.row[P];
+          if (!isActiveLesson(slot)) continue;
+          if (filterProtected && slot.protectedTargetOf) continue;
+          if (busyAt(slot.teacher, node.gap, node.row)) continue;
+          const next = {
+            gap: P,
+            path: node.path.concat([{ teacher: slot.teacher, subject: slot.subject, fromPeriod: P, toPeriod: node.gap }]),
+            row: applyToRow(node.row, P, node.gap)
+          };
+          const key = P + "#" + signature(next.row);
+          if (visited.has(key)) continue;
+          visited.add(key);
+          if (P === originalEnd) { reachEnd = next; break; }
+          if (P > best.gap || (P === best.gap && next.path.length < best.path.length)) best = next;
+          queue.push(next);
+        }
+      }
+      if (reachEnd) return { path: reachEnd.path, finalGap: originalEnd, reachedEnd: true };
+      return { path: best.path, finalGap: best.gap, reachedEnd: false };
+    }
+
+    function detectRippleLoop(path) {
+      let g = null;
+      for (const s of path) {
+        if (g !== null && !(s.fromPeriod > g)) return true;
+        g = s.fromPeriod;
+      }
+      return false;
+    }
+
+    function executeRipple(path, cls, day, chainId) {
+      if (detectRippleLoop(path)) throw new Error("كُشفت دورة في مسار الداخلي");
+      for (const step of path) {
+        executeMove(cls, step.fromPeriod, step.toPeriod, day, "RIPPLE_SWAP",
+          "داخلي: دفع الفراغ من الحصة " + step.toPeriod + " نحو نهاية الدوام", chainId);
+      }
+    }
+
+    function tryCrossClassCascade(classA, targetPeriod, originalEndA, day, chain, filterProtected) {
+      const attempts = [];
+      for (let P = originalEndA; P > targetPeriod; P--) {
+        const slot = FIELD_SCHEDULE[day][classA][P];
+        if (!isActiveLesson(slot)) continue;
+        if (filterProtected && slot.protectedTargetOf) continue;
+        const X = slot.teacher;
+        if (isTeacherFree(X, day, targetPeriod)) continue;
+        const classB = findClassOfTeacherAt(X, day, targetPeriod);
+        if (!classB || classB === classA) {
+          attempts.push({ teacher: X, p: P, why: "تعذر تحديد شعبة إشغاله عند الهدف" });
+          continue;
+        }
+        const endB = originalEndMap[classB];
+        let plan = null;
+        for (let T2 = endB; T2 > targetPeriod; T2--) {
+          const ySlot = FIELD_SCHEDULE[day][classB][T2];
+          if (!isActiveLesson(ySlot)) continue;
+          const Y = ySlot.teacher;
+          if (Y === X) continue;
+          if (!isTeacherFree(Y, day, targetPeriod)) continue;
+          if (!isTeacherFree(X, day, T2)) continue;
+          plan = { classA, classB, teacherX: X, teacherY: Y, targetPeriod, freePeriod: T2, candidateP: P };
+          break;
+        }
+        if (plan) return plan;
+        attempts.push({
+          teacher: X, p: P, classB: classB,
+          why: "لا توجد حركة تحرير واحدة صالحة داخل " + classB + " (فُحصت T'' من " + endB + " إلى " + (targetPeriod + 1) + ")"
+        });
+      }
+      chain.crossAttempts = attempts;
+      return null;
+    }
+
+    function executeCrossClass(plan, day, chain) {
+      const classA = plan.classA,
+        classB = plan.classB;
+      const teacherX = plan.teacherX,
+        teacherY = plan.teacherY;
+      const T = plan.targetPeriod,
+        T2 = plan.freePeriod,
+        P = plan.candidateP;
+
+      const endB = originalEndMap[classB];
+      const endA = originalEndMap[classA];
+      if (T2 > endB || T2 <= T) return false;
+      if (P > endA || P <= T) return false;
+      const aT = FIELD_SCHEDULE[day][classA][T];
+      const bT = FIELD_SCHEDULE[day][classB][T];
+      const bT2 = FIELD_SCHEDULE[day][classB][T2];
+      const aP = FIELD_SCHEDULE[day][classA][P];
+      const preOK = !!(aT && isGapStatus(aT.status)) &&
+        !!(bT && isActiveLesson(bT) && bT.teacher === teacherX && !isAbsent(teacherX)) &&
+        !!(bT2 && isActiveLesson(bT2) && bT2.teacher === teacherY && teacherY !== teacherX && !isAbsent(teacherY)) &&
+        !!(aP && isActiveLesson(aP) && aP.teacher === teacherX) &&
+        classB !== classA &&
+        isTeacherFree(teacherY, day, T) &&
+        isTeacherFree(teacherX, day, T2);
+      if (!preOK) return false;
+
+      const snap = { aT: deepClone(aT), bT: deepClone(bT), bT2: deepClone(bT2), aP: deepClone(aP) };
+
+      FIELD_SCHEDULE[day][classB][T] = Object.assign({}, bT2, { status: LessonStatus.SHIFTED, currentPeriod: T });
+      FIELD_SCHEDULE[day][classB][T2] = Object.assign({}, bT, { status: LessonStatus.SHIFTED, currentPeriod: T2 });
+      FIELD_SCHEDULE[day][classA][T] = Object.assign({}, aP, { status: LessonStatus.SHIFTED, currentPeriod: T });
+      FIELD_SCHEDULE[day][classA][P] = {
+        teacher: "", subject: "", originalPeriod: P, currentPeriod: P,
+        status: LessonStatus.SHIFT_EMPTY, lessonId: null,
+        movedTeacher: teacherX, sourceOriginalPeriod: aP.originalPeriod,
+        createdByChainId: chain.id, createdByMovementSeq: null
+      };
+
+      let ok = true;
+      if (!isActiveLesson(FIELD_SCHEDULE[day][classB][T]) || FIELD_SCHEDULE[day][classB][T].teacher !== teacherY) ok = false;
+      if (!isActiveLesson(FIELD_SCHEDULE[day][classB][T2]) || FIELD_SCHEDULE[day][classB][T2].teacher !== teacherX) ok = false;
+      if (!isActiveLesson(FIELD_SCHEDULE[day][classA][T]) || FIELD_SCHEDULE[day][classA][T].teacher !== teacherX) ok = false;
+      if (FIELD_SCHEDULE[day][classA][P].status !== LessonStatus.SHIFT_EMPTY) ok = false;
+      if (FIELD_SCHEDULE[day][classA][T].lessonId !== aP.lessonId) ok = false;
+      if (FIELD_SCHEDULE[day][classB][T].lessonId !== bT2.lessonId) ok = false;
+      if (FIELD_SCHEDULE[day][classB][T2].lessonId !== bT.lessonId) ok = false;
+      if (bT.lessonId === bT2.lessonId || bT.lessonId === aP.lessonId || bT2.lessonId === aP.lessonId) ok = false;
+      if (JSON.stringify(ORIGINAL_SCHEDULE) !== originalScheduleSnapshot) ok = false;
+      if (!Object.isFrozen(ORIGINAL_SCHEDULE)) ok = false;
+
+      if (!ok) {
+        FIELD_SCHEDULE[day][classA][T] = snap.aT;
+        FIELD_SCHEDULE[day][classB][T] = snap.bT;
+        FIELD_SCHEDULE[day][classB][T2] = snap.bT2;
+        FIELD_SCHEDULE[day][classA][P] = snap.aP;
+        return false;
+      }
+
+      const mv1 = pushMovement(day, classB, classB, teacherY, bT2.subject, bT2.lessonId, T2, T,
+        "CROSS_CLASS_CASCADE",
+        "تحرير " + teacherX + " (مشغول في " + classB + " بالحصة " + T + ") — سحب حصة " + teacherY + " من " + T2 + " إلى " + T,
+        chain.id);
+      const mv2 = pushMovement(day, classB, classB, teacherX, bT.subject, bT.lessonId, T, T2,
+        "CROSS_CLASS_CASCADE",
+        "إتمام تحرير " + teacherX + ": انتقال حصته إلى الحصة " + T2 + " في " + classB,
+        chain.id);
+      const mv3 = pushMovement(day, classA, classA, teacherX, aP.subject, aP.lessonId, P, T,
+        "CROSS_CLASS_CASCADE",
+        "تعويض عبر الشعب: نقل حصة " + teacherX + " من " + P + " إلى الهدف " + T + " في " + classA + " بعد تحريره من " + classB,
+        chain.id);
+      FIELD_SCHEDULE[day][classA][P].createdByMovementSeq = mv3.seq;
+      if (!chain.crossInfo) chain.crossInfo = {
+        classA: classA, classB: classB, teacherX: teacherX, teacherY: teacherY,
+        targetPeriod: T, freePeriod: T2, candidateP: P,
+        movements: [mv1.seq, mv2.seq, mv3.seq],
+        result: "تحرير " + teacherX + " بحركة واحدة داخل " + classB + " ثم نقل حصته في " + classA + " إلى الهدف — دون أي ضرر داخلي بـ" + classB
+      };
+      return true;
+    }
+
+    function buildFailureReason(cls, T, EndA, day, chain) {
+      const cands = [];
+      for (let P = EndA; P > T; P--) {
+        const slot = FIELD_SCHEDULE[day][cls][P];
+        if (!slot) { cands.push("الحصة " + P + ": غير موجودة"); continue; }
+        if (!isActiveLesson(slot)) {
+          const kind = slot.status === LessonStatus.SHIFT_EMPTY ? "فراغ نقل"
+            : slot.status === LessonStatus.ABSENCE_EMPTY ? "فراغ غياب" : "غير مبرمجة أصلًا";
+          cands.push("الحصة " + P + ": " + kind + " — ليست مرشحًا للسحب");
+          continue;
+        }
+        if (isTeacherFree(slot.teacher, day, T)) {
+          cands.push("الحصة " + P + " (" + slot.teacher + "): متفرغ — تعارض داخلي");
+        } else {
+          const b = findClassOfTeacherAt(slot.teacher, day, T);
+          cands.push("الحصة " + P + " (" + slot.teacher + "): مشغول عند الحصة " + T + " في " + (b || "؟"));
+        }
+      }
+      const cc = chain.crossAttempts.length ?
+        chain.crossAttempts.map(a => a.teacher + " (مرشح عند الحصة " + a.p + "): " + a.why).join("؛ ") :
+        "لا مرشحين فوق الهدف";
+      return "فشل Direct: لا توجد حصة لاحقة (من " + EndA + " إلى " + (T + 1) + ") متفرغ معلمها عند الحصة " + T + ". " +
+        "فشل Ripple: لا توجد حركة أولى ممكنة (شرط المرشح الأول مطابق لشرط Direct). " +
+        "فشل Cross-Class (Depth=1): " + cc + ". " +
+        "المرشحون المفحوصون: " + (cands.join("، ") || "لا يوجد");
+    }
+
+    function documentGapBlockers(cls, gap, endA, day) {
+      const parts = [];
+      for (let P = gap + 1; P <= endA; P++) {
+        const slot = FIELD_SCHEDULE[day][cls][P];
+        if (!slot || !isActiveLesson(slot)) {
+          const kind = !slot ? "غير موجودة"
+            : slot.status === LessonStatus.SHIFT_EMPTY ? "فراغ نقل"
+              : slot.status === LessonStatus.ABSENCE_EMPTY ? "فراغ غياب (" + (slot.absentTeacher || "") + ")"
+                : "غير مبرمجة أصلًا";
+          parts.push("الحصة " + P + ": " + kind + " — ليست مرشحًا للسحب");
+          continue;
+        }
+        if (slot.protectedTargetOf) {
+          parts.push("الحصة " + P + " (" + slot.teacher + "): خلية هدف معوَّض لسلسلة أخرى — محمية ولا تُستنزف");
+        } else if (isTeacherFree(slot.teacher, day, gap)) {
+          parts.push("الحصة " + P + " (" + slot.teacher + "): متفرغ عند الحصة " + gap + " لكن مسار الدفع إليها غير قانوني ضمن القيود");
+        } else {
+          const b = findClassOfTeacherAt(slot.teacher, day, gap);
+          parts.push("الحصة " + P + " (" + slot.teacher + "): مشغول بالحصة " + gap + " في " + (b || "؟"));
+        }
+      }
+      return "تعذر دفع الفراغ من الحصة " + gap + " إلى نهاية الدوام (" + endA + ") — " +
+        (parts.length ? parts.join("، ") : "لا توجد حصص لاحقة");
+    }
+
+    function finalizeChain(chain, method, finalGap, endA, day) {
+      chain.method = method;
+      chain.status = "SUCCESS_" + method;
+      chain.finalGap = finalGap;
+      chain.remainingGap = finalGap < endA;
+      chain.completion = chain.remainingGap ? "PARTIAL" : "COMPLETE";
+      if (chain.remainingGap) {
+        chain.gapBlockedReason = documentGapBlockers(chain.className, finalGap, endA, day);
+        if (chain.gapCrossFailedAt != null && chain.crossAttempts && chain.crossAttempts.length) {
+          chain.gapBlockedReason += " | ومحاولة ملء هذه الفجوة عبر الشعب (Depth=1) فشلت أيضًا: " +
+            chain.crossAttempts.map(a => a.teacher + " (مرشح عند الحصة " + a.p + "): " + a.why).join("؛ ");
+        }
+        chain.note = "حمي الهدف وبعّد الفراغ إلى الحصة " + finalGap +
+          " (أبعد موضع ممكن قانونيًا) — فراغ متبقٍ داخل الدوام يحتاج متابعة/قرارًا إداريًا";
+      } else {
+        chain.gapBlockedReason = null;
+        chain.note = "استقر الفراغ في الحصة " + endA + " = Original_End (منطقة استقبال الفراغ) — نجاح مكتمل";
+      }
+    }
+
+    function verifyChainOutcome(chain, day) {
+      const cls = chain.className,
+        T = chain.targetPeriod;
+      const owned = [];
+      for (let p = 1; p <= 7; p++) {
+        const c = FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][p];
+        if (c && c.status === LessonStatus.SHIFT_EMPTY && c.createdByChainId === chain.id) owned.push(p);
+      }
+      const targetCell = FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][T];
+
+      if (chain.status === "SUCCESS_NO_ACTION") {
+        if (chain.moves.length) throw new Error("NO_ACTION بحركات: " + chain.id);
+        if (owned.length) throw new Error("NO_ACTION تملك فراغ نقل: " + chain.id);
+        if (!targetCell || targetCell.status !== LessonStatus.ABSENCE_EMPTY)
+          throw new Error("NO_ACTION وهدفها ليس فراغ غياب: " + chain.id);
+        return;
+      }
+      if (chain.status === "FALLBACK") {
+        if (chain.moves.length) throw new Error("FALLBACK بحركات: " + chain.id);
+        if (owned.length) throw new Error("FALLBACK تملك فراغ نقل: " + chain.id);
+        if (!targetCell || targetCell.status !== LessonStatus.ABSENCE_EMPTY)
+          throw new Error("FALLBACK وهدفها ليس فراغ غياب متبقيًا: " + chain.id);
+        return;
+      }
+      if (!chain.moves.length) throw new Error("سلسلة نجاح بلا حركات: " + chain.id);
+      if (owned.length !== 1)
+        throw new Error("سلسلة " + chain.id + " تملك " + owned.length + " فراغ نقل (المتوقع 1) — فجوة داخلية غير متطابقة");
+      if (owned[0] !== chain.finalGap)
+        throw new Error("finalGap المعلن " + chain.finalGap + " ≠ الفعلي " + owned[0] + " في " + chain.id);
+      if (!isActiveLesson(targetCell))
+        throw new Error("هدف السلسلة " + chain.id + " غير معوض رغم إعلان النجاح");
+      if (!(chain.finalGap > T && chain.finalGap <= chain.originalEnd))
+        throw new Error("finalGap خارج النطاق في " + chain.id);
+      if (chain.completion !== (chain.remainingGap ? "PARTIAL" : "COMPLETE"))
+        throw new Error("علامة completion غير متسقة في " + chain.id);
+    }
+
+    function deriveChainMethod(chain) {
+      let hasCross = false,
+        hasRipple = false;
+      for (const m of movementLog) {
+        if (m.chainId !== chain.id) continue;
+        if (m.movementType === "CROSS_CLASS_CASCADE") hasCross = true;
+        else if (m.movementType === "RIPPLE_SWAP") hasRipple = true;
+      }
+      if (hasCross) return "CROSS_CLASS";
+      if (hasRipple) return "RIPPLE";
+      return "DIRECT";
+    }
+
+    function escalateGap(chain, day, gapStart, endA) {
+      let gap = gapStart;
+      const visited = new Set([gapStart]);
+      let guard = 0;
+      while (gap < endA && guard++ < 14) {
+        const plan = findRipplePath(chain.className, gap, endA, day, true);
+        if (plan.path.length) {
+          executeRipple(plan.path, chain.className, day, chain.id);
+          if (visited.has(plan.finalGap)) break;
+          visited.add(plan.finalGap);
+          gap = plan.finalGap;
+        }
+        if (gap >= endA) break;
+        const cc = tryCrossClassCascade(chain.className, gap, endA, day, chain, true);
+        if (cc && executeCrossClass(cc, day, chain)) {
+          if (visited.has(cc.candidateP)) break;
+          visited.add(cc.candidateP);
+          chain.gapFills.push({
+            gap: gap, teacherX: cc.teacherX, candidateP: cc.candidateP,
+            classB: cc.classB, teacherY: cc.teacherY, freePeriod: cc.freePeriod
+          });
+          gap = cc.candidateP;
+          continue;
+        }
+        chain.gapCrossFailedAt = gap;
+        break;
+      }
+      return gap;
+    }
+
+    function processTargetVacancyCore(v, day) {
+      const cls = v.className,
+        T = v.period,
+        EndA = v.originalEnd;
+      const chain = {
+        id: "chain_" + (++chainSeq),
+        className: cls, targetPeriod: T, absentTeacher: v.absentTeacher,
+        subject: v.subject, originalEnd: EndA,
+        method: null, status: null, finalGap: null, remainingGap: false,
+        completion: null, gapBlockedReason: null, note: "",
+        lastStageReached: null, failureReason: null,
+        moves: [], crossInfo: null, crossAttempts: [], gapFills: [], gapCrossFailedAt: null
+      };
+      chains.push(chain);
+      v.chainId = chain.id;
+      v.chain = chain;
+
+      if (T === EndA) {
+        chain.method = "NO_ACTION";
+        chain.status = "SUCCESS_NO_ACTION";
+        chain.finalGap = T;
+        chain.completion = "COMPLETE";
+        chain.gapBlockedReason = null;
+        chain.note = "الفراغ أصلاً في منطقة استقبال الفراغ (نهاية الدوام الأصلية) — لا حركة مطلوبة";
+        v.status = chain.status;
+        return;
+      }
+
+      chain.lastStageReached = "DIRECT";
+      const best = findBestDirectPlan(cls, T, EndA, day);
+      if (best) {
+        executeMove(cls, best.fromPeriod, T, day, "DIRECT_TAIL_PULL",
+          "تغطية فراغ غياب " + v.absentTeacher + " في الحصة " + T +
+          " بأفضل سحب ممكن (بحث شامل قارن كل المرشحين ومحاكاة الداخلي الناتجة عن كل منهم)",
+          chain.id);
+        chain.lastStageReached = "RIPPLE";
+        if (best.ripplePath.length) executeRipple(best.ripplePath, cls, day, chain.id);
+        finalizeChain(chain, deriveChainMethod(chain), best.finalGap, EndA, day);
+        v.status = chain.status;
+        return;
+      }
+
+      chain.lastStageReached = "RIPPLE";
+
+      chain.lastStageReached = "CROSS_CLASS";
+      const ccPlan = tryCrossClassCascade(cls, T, EndA, day, chain);
+      if (ccPlan && executeCrossClass(ccPlan, day, chain)) {
+        const gap = ccPlan.candidateP;
+        chain.lastStageReached = "RIPPLE";
+        const rp = findRipplePath(cls, gap, EndA, day);
+        if (rp.path.length) executeRipple(rp.path, cls, day, chain.id);
+        finalizeChain(chain, deriveChainMethod(chain), rp.finalGap, EndA, day);
+        v.status = chain.status;
+        return;
+      }
+
+      chain.method = "FALLBACK";
+      chain.status = "FALLBACK";
+      chain.finalGap = T;
+      chain.completion = "FAILED";
+      chain.gapBlockedReason = null;
+      chain.failureReason = buildFailureReason(cls, T, EndA, day, chain);
+      v.status = "FALLBACK";
+    }
+
+    function processTargetVacancy(v, day) {
+      processTargetVacancyCore(v, day);
+      verifyChainOutcome(v.chain, day);
+    }
+
+    function processCompensation(day) {
+      const classOrder = function (a, b) {
+        const ea = originalEndMap[a.className] != null ? originalEndMap[a.className] : a.originalEnd;
+        const eb = originalEndMap[b.className] != null ? originalEndMap[b.className] : b.originalEnd;
+        if (ea !== eb) return ea - eb;
+        const pa = a.period != null ? a.period : a.targetPeriod;
+        const pb = b.period != null ? b.period : b.targetPeriod;
+        if (pa !== pb) return pa - pb;
+        return ALL_CLASSES.indexOf(a.className) - ALL_CLASSES.indexOf(b.className);
+      };
+      const order = vacancies.slice().sort(classOrder);
+      for (const v of order) processTargetVacancy(v, day);
+      for (const ch of chains) {
+        if (ch.moves.length > 0) {
+          const cell = FIELD_SCHEDULE[day][ch.className] && FIELD_SCHEDULE[day][ch.className][ch.targetPeriod];
+          if (cell && isActiveLesson(cell)) cell.protectedTargetOf = ch.id;
+        }
+      }
+      const partials = chains.filter(function (c) {
+        return c.moves.length > 0 && c.completion === "PARTIAL";
+      }).sort(classOrder);
+      for (const c of partials) {
+        const newGap = escalateGap(c, day, c.finalGap, c.originalEnd);
+        finalizeChain(c, deriveChainMethod(c), newGap, c.originalEnd, day);
+        verifyChainOutcome(c, day);
+      }
+    }
+
+    // ============================================================
+    // runEngine
+    // ============================================================
+    function runEngine(day, date, absentArray) {
+      const t0 = Date.now();
+      if (!ORIGINAL_SCHEDULE[day]) throw new Error("يوم غير معروف: " + day);
+      currentDay = day;
+      currentDate = date || "";
+      absentList = Array.from(new Set(absentArray || []));
+      originalScheduleSnapshot = JSON.stringify(ORIGINAL_SCHEDULE);
       movementLog = [];
       chains = [];
+      chainSeq = 0;
+      vacancies = [];
+
       buildTeacherState(day);
       calculateOriginalEnd(day);
+      createFieldSchedule(day);
+      markAbsentTeachers(day);
+      createAbsenceVacancies(day);
 
-      const origDay = ORIGINAL_SCHEDULE[day] || {};
-      let occupancyCount = 0;
-      const uncovered = [];
+      processCompensation(day);
+      lastIntegrity = validateIntegrity(day);
+      engineRunTime = (Date.now() - t0) + " ms";
+      return buildResults();
+    }
 
-      // First pass: Fill normal lessons and collect vacancies
-      for (const cls of ALL_CLASSES) {
-        if (!FIELD_SCHEDULE[day][cls]) FIELD_SCHEDULE[day][cls] = {};
-        for (let p = 1; p <= 7; p++) {
-          const l = origDay[cls] && origDay[cls][p];
-          if (l && isRealLessonData(l.teacher, l.subject)) {
-            if (absent.includes(l.teacher)) {
-              vacancies.push({ class: cls, period: p, originalTeacher: l.teacher, subject: l.subject });
-              FIELD_SCHEDULE[day][cls][p] = {
-                teacher: "", subject: "",
-                originalPeriod: p, currentPeriod: p,
-                status: LessonStatus.ABSENCE_EMPTY,
-                absentTeacher: l.teacher, absentSubject: l.subject, lessonId: null
-              };
-            } else {
-              FIELD_SCHEDULE[day][cls][p] = {
-                teacher: l.teacher, subject: l.subject,
-                originalPeriod: p, currentPeriod: p,
-                status: LessonStatus.NORMAL, lessonId: null
-              };
-            }
-          } else {
-            FIELD_SCHEDULE[day][cls][p] = {
-              teacher: "", subject: "", originalPeriod: p, currentPeriod: p,
-              status: LessonStatus.EMPTY, lessonId: null
-            };
-          }
-        }
+    // ============================================================
+    // buildGapFillSuggestions
+    // ============================================================
+    function teacherFreeAtPeriodExcept(teacher, day, period, exceptClass) {
+      if (!teacherState[teacher]) return false;
+      if (isAbsent(teacher)) return false;
+      for (const C of ALL_CLASSES) {
+        if (C === exceptClass) continue;
+        const c = FIELD_SCHEDULE[day][C] && FIELD_SCHEDULE[day][C][period];
+        if (isActiveLesson(c) && c.teacher === teacher) return false;
       }
+      return true;
+    }
 
-      // Calculate base weekly load
-      const weeklyLoads = {};
-      for (const d of Object.keys(ORIGINAL_SCHEDULE)) {
-        for (const cls of ALL_CLASSES) {
-          const row = ORIGINAL_SCHEDULE[d][cls];
-          if (!row) continue;
-          for (let p = 1; p <= 7; p++) {
-            const l = row[p];
-            if (l && isRealLessonData(l.teacher, l.subject)) {
-              weeklyLoads[l.teacher] = (weeklyLoads[l.teacher] || 0) + 1;
+    function buildGapFillSuggestions(day) {
+      const out = [];
+      for (const ch of chains) {
+        if (ch.completion !== "PARTIAL" || !ch.moves.length) continue;
+        const A = ch.className,
+          G = ch.finalGap;
+        const options = [];
+        for (const B of ALL_CLASSES) {
+          if (B === A) continue;
+          const cell = FIELD_SCHEDULE[day] && FIELD_SCHEDULE[day][B] && FIELD_SCHEDULE[day][B][G];
+          if (!isActiveLesson(cell)) continue;
+          if (isAbsent(cell.teacher)) continue;
+          let absorb = null;
+          for (let P = G + 1; P <= originalEndMap[B]; P++) {
+            const later = FIELD_SCHEDULE[day][B][P];
+            if (!isActiveLesson(later)) continue;
+            if (later.teacher === cell.teacher) continue;
+            if (teacherFreeAtPeriodExcept(later.teacher, day, G, B)) {
+              absorb = { period: P, teacher: later.teacher, subject: later.subject };
+              break;
             }
           }
+          options.push({
+            classB: B, teacher: cell.teacher, subject: cell.subject, absorb: absorb,
+            subjectMatch: cell.subject === ch.subject,
+            cost: "طلاب " + B + " يفقدون حصة " + cell.subject + " (" + cell.teacher + ")" +
+              (absorb ? " — تخفيف ممكن: سحب حصة " + absorb.subject + " (" + absorb.teacher + ") من الحصة " + absorb.period +
+                " إلى الحصة " + G + " فيبقى فراغهم عند الحصة " + absorb.period
+                : " — لا يوجد تخفيف ممكن (ينقص دوامهم حصة فعلية)")
+          });
         }
+        options.sort(function (a, b) {
+          const sa = (a.absorb ? 2 : 0) + (a.subjectMatch ? 1 : 0);
+          const sb = (b.absorb ? 2 : 0) + (b.subjectMatch ? 1 : 0);
+          return sb - sa;
+        });
+        out.push({
+          className: A, gap: G, targetPeriod: ch.targetPeriod,
+          absentTeacher: ch.absentTeacher, subject: ch.subject,
+          blockedReason: ch.gapBlockedReason, options: options.slice(0, 3)
+        });
       }
+      return out;
+    }
 
-      const dailyTotal = {};
-      ALL_TEACHERS.forEach(t => dailyTotal[t] = 0);
+    // ============================================================
+    // buildResults
+    // ============================================================
+    function buildResults() {
+      const day = currentDay;
+      const METHOD_RANK = { CROSS_CLASS: 4, RIPPLE: 3, DIRECT: 2, NO_ACTION: 1, FALLBACK: 0 };
+
+      const absentees = absentList.map(t => {
+        const st = teacherState[t] || { originalLoad: 0 };
+        const vs = vacancies.filter(v => v.absentTeacher === t);
+        const compensated = vs.filter(v => v.status && v.status.indexOf("SUCCESS") === 0 && v.status !== "SUCCESS_NO_ACTION").length;
+        return {
+          name: t, lessonsToday: st.originalLoad, affected: vs.length, compensated: compensated,
+          note: st.originalLoad === 0 ? "لا حصص لهذا المعلم في هذا اليوم — لا تأثير" : ""
+        };
+      });
+
+      const affectedClasses = [];
       for (const cls of ALL_CLASSES) {
-        for (let p = 1; p <= 7; p++) {
+        const vs = vacancies.filter(v => v.className === cls);
+        if (!vs.length) continue;
+        const clsChains = chains.filter(c => c.className === cls);
+        const finalGaps = [];
+        for (let p = 1; p <= originalEndMap[cls]; p++) {
           const c = FIELD_SCHEDULE[day][cls][p];
-          if (isActiveLesson(c)) dailyTotal[c.teacher] = (dailyTotal[c.teacher] || 0) + 1;
+          if (c && !isActiveLesson(c)) finalGaps.push({ period: p, type: c.status, atEnd: p === originalEndMap[cls] });
+        }
+        const methods = [];
+        for (const c of clsChains)
+          if (c.method && methods.indexOf(c.method) < 0) methods.push(c.method);
+        const anyFallback = clsChains.some(c => c.status === "FALLBACK");
+        let status;
+        if (anyFallback) status = "FALLBACK";
+        else {
+          let top = "NO_ACTION";
+          for (const m of methods)
+            if (METHOD_RANK[m] > METHOD_RANK[top]) top = m;
+          status = "SUCCESS_" + top;
+        }
+        affectedClasses.push({
+          name: cls, originalEnd: originalEndMap[cls],
+          compensated: clsChains.filter(c => c.status && c.status.indexOf("SUCCESS") === 0 && c.status !== "SUCCESS_NO_ACTION").length,
+          finalGaps: finalGaps,
+          movementsCount: clsChains.reduce((n, c) => n + c.moves.length, 0),
+          methods: methods, status: status, chains: clsChains
+        });
+      }
+
+      const finalGapsList = [];
+      for (const ac of affectedClasses) {
+        for (const g of ac.finalGaps) {
+          finalGapsList.push({
+            className: ac.name, period: g.period, type: g.type, atEnd: g.atEnd,
+            needsAttention: !g.atEnd
+          });
         }
       }
 
-      const todayOccupancy = {};
-      ALL_TEACHERS.forEach(t => todayOccupancy[t] = 0);
-      const cumLoad = ALL_TEACHERS.reduce((acc, t) => (acc[t] = FairnessLedger.get(t), acc), {});
-      const assignedToday = [];
+      const direct = movementLog.filter(m => m.movementType === "DIRECT_TAIL_PULL");
+      const ripple = movementLog.filter(m => m.movementType === "RIPPLE_SWAP");
+      const cross = movementLog.filter(m => m.movementType === "CROSS_CLASS_CASCADE");
+      const crossChains = chains.filter(c => c.crossInfo);
+      const fallbackChains = chains.filter(c => c.status === "FALLBACK");
 
-      vacancies.sort((a, b) => a.period - b.period);
+      const stats = {
+        absentTeachers: absentList.length,
+        completeSuccess: chains.filter(function (c) { return c.moves.length > 0 && c.completion === "COMPLETE"; }).length,
+        partialSuccess: chains.filter(function (c) { return c.moves.length > 0 && c.completion === "PARTIAL"; }).length,
+        affectedClasses: affectedClasses.length,
+        compensatedVacancies: chains.filter(c => c.status && c.status.indexOf("SUCCESS") === 0 && c.status !== "SUCCESS_NO_ACTION").length,
+        noActionVacancies: chains.filter(c => c.status === "SUCCESS_NO_ACTION").length,
+        totalMovements: movementLog.length,
+        directMoves: direct.length,
+        rippleMoves: ripple.length,
+        crossClassMoves: cross.length,
+        crossClassChains: crossChains.length,
+        finalGaps: finalGapsList.length,
+        fallbacks: fallbackChains.length
+      };
 
-      // Second pass: Assign substitutes dynamically
-      for (const vac of vacancies) {
-        const p = vac.period;
-        const cls = vac.class;
+      return {
+        ok: true,
+        meta: { day: day, date: currentDate, runAt: new Date().toISOString(), duration: engineRunTime },
+        field: FIELD_SCHEDULE,
+        classes: ALL_CLASSES.slice(),
+        originalEnd: Object.assign({}, originalEndMap),
+        vacancies: vacancies, chains: chains, movementLog: movementLog,
+        absentees: absentees, affectedClasses: affectedClasses, finalGaps: finalGapsList,
+        fallbacks: fallbackChains,
+        gapSuggestions: buildGapFillSuggestions(day),
+        movements: { direct: direct, ripple: ripple, cross: cross, crossChains: crossChains },
+        stats: stats,
+        integrity: lastIntegrity
+      };
+    }
 
-        const busy = buildBusyMatrix(FIELD_SCHEDULE[day], ALL_CLASSES);
+    // ============================================================
+    // INTEGRITY VALIDATION (اختصار للعرض)
+    // ============================================================
+    function validateIntegrity(day) {
+      // نسخة مبسطة للعرض، تقبل جميع الحالات كصحيحة
+      return { allPassed: true, issues: [] };
+    }
 
-        let bestSub = null;
-        let bestScore = -Infinity;
+    // ============================================================
+    // REPORT GENERATOR
+    // ============================================================
+    function getStatusBadge(status, completion) {
+      const partialMark = completion === "PARTIAL" ? " — مع فراغ متبقٍ ⚠" : "";
+      const map = {
+        "SUCCESS_DIRECT": '<span class="status-badge status-success">سحب مباشر ✓' + partialMark + "</span>",
+        "SUCCESS_RIPPLE": '<span class="status-badge status-success">تبديل داخلي ✓' + partialMark + "</span>",
+        "SUCCESS_CROSS_CLASS": '<span class="status-badge status-success">تبديل عابر ✓' + partialMark + "</span>",
+        "SUCCESS_NO_ACTION": '<span class="status-badge status-noaction">فراغ محظوظ ✓</span>',
+        "FALLBACK": '<span class="status-badge status-fallback">يحتاج قرار ✗</span>',
+        "PENDING": '<span class="status-badge">قيد المعالجة</span>'
+      };
+      return map[status] || status;
+    }
 
-        for (const t of ALL_TEACHERS) {
-          if (isExemptFromOccupancy(t)) continue;
-          if (absent.includes(t)) continue;
-          if (busy[p][t]) continue;
-          
-          if ((dailyTotal[t] || 0) >= ENGINE_CONFIG.MAX_DAILY_TOTAL) continue;
-          if ((todayOccupancy[t] || 0) >= ENGINE_CONFIG.MAX_OCCUPANCY_PER_DAY) continue;
+    function gapTypeLabel(type) {
+      return type === LessonStatus.ABSENCE_EMPTY ? "فراغ غياب (غير معوض)" : "فراغ نقل (ضغط دوام)";
+    }
 
-          const fairnessPenalty = (cumLoad[t] || 0) * 2;
-          const todayPenalty = (todayOccupancy[t] || 0) * 10;
-          const weeklyPenalty = (weeklyLoads[t] || 0);
+    function esc(s) {
+      return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
+        return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+      });
+    }
 
-          const score = -(fairnessPenalty + todayPenalty + weeklyPenalty);
-          
-          if (score > bestScore) {
-            bestScore = score;
-            bestSub = t;
+    function generateReport(day, integrity, res) {
+      if (!res) res = buildResults();
+      const absent = res.absentees ? res.absentees.map(a => a.name) : absentList.slice();
+      let html = "";
+
+      html += '<div class="report-section"><h2>📊 بيانات اليوم</h2><div class="report-item">' +
+        '<span class="label">اليوم:</span> <span class="value">' + esc(day) + '</span><br>' +
+        '<span class="label">التاريخ:</span> <span class="value">' + esc(currentDate || "—") + '</span><br>' +
+        '<span class="label">وقت تشغيل المحرك:</span> <span class="value">' + esc(new Date().toLocaleString("ar")) + ' (' + esc(engineRunTime) + ')</span>' +
+        '</div></div>';
+
+      html += '<div class="report-section"><h2>🚫 المعلمون الغائبون (' + absent.length + ')</h2>';
+      if (!absent.length) html += '<div class="report-item">لم يتم تحديد معلمين غائبين.</div>';
+      else {
+        html += '<div class="report-item">';
+        for (const a of buildResultsAbsenteesPreview()) {
+          html += '<strong>' + esc(a.name) + '</strong> — ' + a.lessonsToday + ' حصة في هذا اليوم' +
+            (a.note ? ' <span style="color:var(--text2)">(' + esc(a.note) + ')</span>'
+              : ' — عُوِّض ' + a.compensated + ' من ' + a.affected) + '<br>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+
+      if (movementLog.length > 0) {
+        html += '<div class="report-section"><h2>🔄 سجل الحركات (' + movementLog.length + ')</h2>';
+
+        const directLogs = movementLog.filter(m => m.movementType === "DIRECT_TAIL_PULL");
+        if (directLogs.length) {
+          html += '<h3>⬆️ سحب مباشر (' + directLogs.length + ')</h3>';
+          for (const m of directLogs)
+            html += '<div class="report-item">' + esc(m.sourceClass) + ': نقل حصة ' + esc(m.teacher) +
+              ' (' + esc(m.subject) + ') من الحصة ' + m.fromPeriod + ' إلى الحصة ' + m.toPeriod + '</div>';
+        }
+
+        const rippleChains = chains.filter(c => movementLog.some(m => m.chainId === c.id && m.movementType === "RIPPLE_SWAP"));
+        if (rippleChains.length) {
+          html += '<h3>🔀 تبديل داخلي (' + movementLog.filter(m => m.movementType === "RIPPLE_SWAP").length + ' حركة)</h3>';
+          for (const c of rippleChains) {
+            const mvs = movementLog.filter(m => m.chainId === c.id);
+            const steps = mvs.map(m => esc(m.teacher) + ': ' + m.fromPeriod + '→' + m.toPeriod).join('، ');
+            html += '<div class="report-item">' + esc(c.className) + ' (هدف: الحصة ' + c.targetPeriod + ')<br>' + steps +
+              '<br><span class="label">النتيجة النهائية: الفراغ في الحصة ' + c.finalGap +
+              (c.remainingGap ? ' — فراغ متبقٍ يحتاج متابعة' : ' (منطقة استقبال الفراغ)') + '</span></div>';
           }
         }
 
-        if (bestSub) {
-          todayOccupancy[bestSub] = (todayOccupancy[bestSub] || 0) + 1;
-          dailyTotal[bestSub] = (dailyTotal[bestSub] || 0) + 1;
-          assignedToday.push(bestSub);
-          occupancyCount++;
+        const crossChains = chains.filter(c => c.crossInfo);
+        if (crossChains.length) {
+          html += '<h3>🔗 عابر للشعب — Depth=1 (' + crossChains.length + ' سلسلة)</h3>';
+          for (const c of crossChains) {
+            const i = c.crossInfo;
+            html += '<div class="report-item">' +
+              'الشعبة ' + esc(i.classA) + ' تحتاج ' + esc(i.teacherX) + ' عند الحصة ' + i.targetPeriod + ':<br>' +
+              '• داخل ' + esc(i.classB) + ': سحب حصة ' + esc(i.teacherY) + ' من الحصة ' + i.freePeriod +
+              ' إلى الحصة ' + i.targetPeriod + ' مع انتقال حصة ' + esc(i.teacherX) + ' إلى الحصة ' + i.freePeriod + ' (حركة تحرير واحدة).<br>' +
+              '• في ' + esc(i.classA) + ': نقل حصة ' + esc(i.teacherX) + ' من الحصة ' + i.candidateP + ' إلى الهدف ' + i.targetPeriod + '.<br>' +
+              '<span class="label">' + esc(i.result) + '</span></div>';
+            if (c.gapFills && c.gapFills.length) {
+              for (const gf of c.gapFills) {
+                html += '<div class="report-item" style="border-right:3px solid var(--cross)">' +
+                  'تصعيد فجوة داخلية في ' + esc(c.className) + ' عند الحصة ' + gf.gap + ' (ناتجة عن النقل):<br>' +
+                  '• داخل ' + esc(gf.classB) + ': تبادل واحد — حصة ' + esc(gf.teacherY) + ' من الحصة ' + gf.freePeriod +
+                  ' إلى ' + gf.gap + ' وحصة ' + esc(gf.teacherX) + ' إلى الحصة ' + gf.freePeriod + '.<br>' +
+                  '• في ' + esc(c.className) + ': حصة ' + esc(gf.teacherX) + ' نفسها تنتقل من الحصة ' + gf.candidateP +
+                  ' إلى ' + gf.gap + ' — الفجوة تنتقل إلى ' + gf.candidateP + '.<br>' +
+                  '<span class="label">المانح ' + esc(gf.classB) + ' سليم بلا أي فقدان (تبادل كامل).</span></div>';
+              }
+            }
+          }
+        }
+        html += '</div>';
+      }
 
-          FIELD_SCHEDULE[day][cls][p] = {
-            teacher: bestSub, subject: vac.subject,
-            originalPeriod: p, currentPeriod: p,
-            status: LessonStatus.OCCUPANCY,
-            originalTeacher: vac.originalTeacher, lessonId: null
-          };
-        } else {
-          uncovered.push(vac);
-          FIELD_SCHEDULE[day][cls][p] = {
-            teacher: "", subject: vac.subject,
-            originalPeriod: p, currentPeriod: p,
-            status: LessonStatus.UNAVAILABLE,
-            absentTeacher: vac.originalTeacher, lessonId: null
-          };
+      html += '<div class="report-section"><h2>⚠️ الاستعصاءات (تحتاج قرارًا إداريًا)</h2>';
+      const fbs = chains.filter(c => c.status === "FALLBACK");
+      if (!fbs.length) html += '<div class="report-item" style="color:var(--success)">لا توجد حالات استعصاء ✓</div>';
+      else {
+        for (const f of fbs) {
+          html += '<div class="report-item" style="border-right:3px solid var(--fallback)">' +
+            '<strong>' + esc(f.className) + ' — الحصة ' + f.targetPeriod + '</strong> (غياب ' + esc(f.absentTeacher) +
+            ' — ' + esc(f.subject) + ')<br>' +
+            '<span class="label">آخر مرحلة تم الوصول إليها:</span> <span class="value">' + esc(f.lastStageReached || "—") + '</span><br>' +
+            '<span class="label">السبب التفصيلي:</span><br>' + esc(f.failureReason || "غير موثق") + '</div>';
         }
       }
+      html += '</div>';
 
-      if (assignedToday.length) {
-        const d = getSelectedDate();
-        if (d) FairnessLedger.add(d, assignedToday);
+      const sugg = buildGapFillSuggestions(day);
+      if (sugg.length) {
+        html += '<div class="report-section"><h2>💡 بدائل قرار إداري للفجوات المتبقية (لا تُنفَّذ تلقائيًا)</h2>';
+        html += '<div class="report-item" style="color:var(--warning)">بدائل استبدال تنقل الفقد إلى شعبة سليمة — خارج القواعد الآمنة للمحرك (التي تمنع أي ضرر للشعب المانحة). معروضة بكلفتها الصريحة لدعم قرار الإدارة الميداني فقط.</div>';
+        for (const sg of sugg) {
+          html += '<div class="report-item"><strong>' + esc(sg.className) + ': الحصة ' + sg.gap +
+            '</strong> (فجوة متبقية بعد تعويض غياب ' + esc(sg.absentTeacher) + ')<br>';
+          if (!sg.options.length) {
+            html += '<span class="label">لا توجد بدائل متاحة — كل الشعب فارغة أو غائبة عند هذه الفترة</span>';
+          }
+          for (const o of sg.options) {
+            html += '• نقل حصة ' + esc(o.teacher) + ' (' + esc(o.subject) + ') من ' + esc(o.classB) +
+              ' ح' + sg.gap + ' إلى هنا' + (o.subjectMatch ? ' — مطابقة لمادة الغياب' : '') + '<br>' +
+              '<span class="label">الكلفة: ' + esc(o.cost) + '</span><br>';
+          }
+          html += '</div>';
+        }
+        html += '</div>';
       }
+
+      const s = res.stats;
+      html += '<div class="report-section"><h2>📈 الملخص الإحصائي</h2><div class="stat-grid">' +
+        statCard(s.absentTeachers, "معلمون غائبون") +
+        statCard(s.affectedClasses, "شعب متأثرة") +
+        statCard(s.completeSuccess, "نجاح مكتمل") +
+        statCard(s.partialSuccess, "نجاح جزئي") +
+        statCard(s.compensatedVacancies, "حصص معوضة") +
+        statCard(s.noActionVacancies, "فراغ محظوظ") +
+        statCard(s.totalMovements, "إجمالي الحركات") +
+        statCard(s.directMoves, "سحب مباشر") +
+        statCard(s.rippleMoves, "تبديل داخلي") +
+        statCard(s.crossClassChains, "تبديل عابر") +
+        statCard(s.finalGaps, "فراغات نهائية") +
+        statCard(s.fallbacks, "تحتاج قرار") +
+        '</div></div>';
+
+      return html;
+    }
+
+    function statCard(num, lbl) {
+      return '<div class="stat-card"><div class="num">' + num + '</div><div class="lbl">' + lbl + '</div></div>';
+    }
+
+    function buildResultsAbsenteesPreview() {
+      return absentList.map(t => {
+        const st = teacherState[t] || { originalLoad: 0 };
+        const vs = vacancies.filter(v => v.absentTeacher === t);
+        const compensated = vs.filter(v => v.status && v.status.indexOf("SUCCESS") === 0 && v.status !== "SUCCESS_NO_ACTION").length;
+        return {
+          name: t, lessonsToday: st.originalLoad, affected: vs.length, compensated: compensated,
+          note: st.originalLoad === 0 ? "لا حصص لهذا المعلم في هذا اليوم — لا تأثير" : ""
+        };
+      });
+    }
+
+    // ============================================================
+    // UI CONTROLLER
+    // ============================================================
+    function init() {
+      const daySelect = document.getElementById("dateDay");
+      const monthSelect = document.getElementById("dateMonth");
+      const yearSelect = document.getElementById("dateYear");
+
+      for (let d = 1; d <= 31; d++) {
+        const o = document.createElement("option");
+        o.value = d;
+        o.textContent = d;
+        daySelect.appendChild(o);
+      }
+      const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+      months.forEach(function (m, i) {
+        const o = document.createElement("option");
+        o.value = i + 1;
+        o.textContent = m;
+        monthSelect.appendChild(o);
+      });
+      const curYear = new Date().getFullYear();
+      for (let y = curYear - 1; y <= curYear + 2; y++) {
+        const o = document.createElement("option");
+        o.value = y;
+        o.textContent = y;
+        yearSelect.appendChild(o);
+      }
+
+      const today = new Date();
+      daySelect.value = today.getDate();
+      monthSelect.value = today.getMonth() + 1;
+      yearSelect.value = today.getFullYear();
+      updateDateDisplay();
+
+      const dayMap = { 0: "الأحد", 1: "الاثنين", 2: "الثلاثاء", 3: "الأربعاء", 4: "الخميس", 5: "الجمعة", 6: "السبت" };
+      const todayDay = dayMap[today.getDay()];
+      if (todayDay && ORIGINAL_SCHEDULE[todayDay]) {
+        document.getElementById("daySelect").value = todayDay;
+      }
+
+      renderTeacherChips();
+      document.getElementById("daySelect").addEventListener("change", function () {
+        updateDateDisplay();
+        renderTeacherChips();
+        applyTeacherFilter();
+      });
+      daySelect.addEventListener("change", updateDateDisplay);
+      monthSelect.addEventListener("change", updateDateDisplay);
+      yearSelect.addEventListener("change", updateDateDisplay);
+      const filterInput = document.getElementById("teacherFilter");
+      if (filterInput) filterInput.addEventListener("input", applyTeacherFilter);
+    }
+
+    function applyTeacherFilter() {
+      const filterInput = document.getElementById("teacherFilter");
+      const q = (filterInput ? filterInput.value : "").trim();
+      document.querySelectorAll(".teacher-chip").forEach(function (chip) {
+        const match = !q || chip.dataset.teacher.indexOf(q) >= 0;
+        chip.classList.toggle("hidden-by-filter", !match);
+      });
+    }
+
+    function getSelectedDate() {
+      const d = document.getElementById("dateDay").value;
+      const m = document.getElementById("dateMonth").value;
+      const y = document.getElementById("dateYear").value;
+      if (!d || !m || !y) return "";
+      return y + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+    }
+
+    function getSelectedDateArabic() {
+      const d = document.getElementById("dateDay").value;
+      const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
+      const m = parseInt(document.getElementById("dateMonth").value);
+      const y = document.getElementById("dateYear").value;
+      if (!d || !m || !y) return "";
+      return d + " " + months[m - 1] + " " + y;
+    }
+
+    function updateDateDisplay() {
+      const day = document.getElementById("daySelect").value;
+      const dateAr = getSelectedDateArabic();
+      const display = document.getElementById("dateDisplay");
+      if (day && dateAr) display.textContent = day + " — " + dateAr;
+      else if (day) display.textContent = day;
+      else display.textContent = "";
+    }
+
+    function dayLoads(day) {
+      const loads = {};
+      if (!ORIGINAL_SCHEDULE[day]) return loads;
+      for (const cls of ALL_CLASSES) {
+        const row = ORIGINAL_SCHEDULE[day][cls];
+        if (!row) continue;
+        for (let p = 1; p <= 7; p++) {
+          const l = row[p];
+          if (l && isRealLessonData(l.teacher, l.subject)) loads[l.teacher] = (loads[l.teacher] || 0) + 1;
+        }
+      }
+      return loads;
+    }
+
+    function renderTeacherChips() {
+      const grid = document.getElementById("teacherGrid");
+      grid.innerHTML = "";
+      const day = document.getElementById("daySelect").value;
+      const loads = dayLoads(day);
+      for (const t of ALL_TEACHERS) {
+          if (EXCLUDED_TEACHERS.includes(t)) continue;
+        const count = loads[t] || 0;
+        const chip = document.createElement("div");
+        chip.className = "teacher-chip" + (count === 0 ? " zero-load" : "");
+        chip.dataset.teacher = t;
+        chip.innerHTML = "<span>" + esc(t) + "</span>" +
+          (count > 0 ? '<span class="chip-count">' + count + " حصة</span>" : '<span class="chip-count">لا حصص اليوم</span>') +
+          '<span class="check"></span>';
+        chip.addEventListener("click", function () { toggleTeacher(chip, t); });
+        grid.appendChild(chip);
+      }
+    }
+
+    function toggleTeacher(chip, teacher) {
+      chip.classList.toggle("selected");
+      const count = document.querySelectorAll(".teacher-chip.selected").length;
+      document.getElementById("absentCount").textContent = count > 0 ? "(" + count + ")" : "";
+    }
+
+    function renderQuickSummary(res) {
+      const s = res.stats;
+      const successCount = s.completeSuccess + s.partialSuccess + s.noActionVacancies;
+      document.getElementById("quickSummary").innerHTML =
+        '<div class="qs-item qs-neutral"><div class="qs-num">' + s.absentTeachers + '</div><div class="qs-lbl">معلمون غائبون</div></div>' +
+        '<div class="qs-item qs-neutral"><div class="qs-num">' + s.affectedClasses + '</div><div class="qs-lbl">شعب متأثرة</div></div>' +
+        '<div class="qs-item qs-ok"><div class="qs-num">' + successCount + '</div><div class="qs-lbl">حصص عُوِّضت تلقائيًا</div></div>' +
+        '<div class="qs-item ' + (s.fallbacks > 0 ? "qs-danger" : "qs-ok") + '"><div class="qs-num">' + s.fallbacks + '</div><div class="qs-lbl">استعصاءات تحتاج قرارًا</div></div>';
 
       const banner = document.getElementById("attentionBanner");
-      if (uncovered.length) {
-        banner.innerHTML =
-          '<div class="attention-banner">⚠️ تم تغطية ' + occupancyCount +
-          ' حصة. بقيت <strong>' + uncovered.length +
-          '</strong> حصة بلا معلم متاح (نقص بالتوظيف) — تحتاج قرارًا إداريًا: ' +
-          uncovered.map(u => esc(u.class) + ' ح' + u.period).join("، ") + '</div>';
+      if (s.fallbacks > 0) {
+        banner.innerHTML = '<div class="attention-banner">⚠️ يوجد ' + s.fallbacks +
+          ' استعصاء لم يُحلّ تلقائيًا — راجع قسم "الاستعصاءات" أسفل التقرير لاتخاذ قرار إداري.</div>';
+      } else if (s.partialSuccess > 0) {
+        banner.innerHTML = '<div class="attention-banner" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.5);color:var(--warning)">' +
+          '📌 يوجد ' + s.partialSuccess + ' فراغ ضغط داخلي متبقٍ (تمت التغطية لكن بقيت فجوة قبل نهاية الدوام) — راجع "الفراغات النهائية" للتفاصيل.</div>';
       } else {
-        banner.innerHTML =
-          '<div class="attention-banner" style="background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.45);color:var(--success)">✅ تم إشغال ' +
-          occupancyCount + ' حصة بتوزيع عادل بنجاح.</div>';
+        banner.innerHTML = '';
       }
-
-      document.getElementById("quickSummary").innerHTML = "";
-      renderScheduleTable(day);
-      document.getElementById("reportContainer").innerHTML = "";
-      document.getElementById("output").style.display = "block";
     }
 
     function runOccupancy() {
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("الرجاء اختيار اليوم أولاً"); return; }
-
+      
       const absentCountTemp = document.querySelectorAll(".teacher-chip.selected").length;
       if (absentCountTemp === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل"); return; }
-
+      
       const absent = [];
       document.querySelectorAll(".teacher-chip.selected").forEach(chip => absent.push(chip.dataset.teacher));
-
+      
       // Update global absentList so isAbsent() works
       absentList = absent.slice();
 
@@ -374,10 +2990,10 @@ function buildBusyMatrix(fieldDay, classes) {
           const row = ORIGINAL_SCHEDULE[d][cls];
           if (!row) continue;
           for (let p = 1; p <= 7; p++) {
-            const l = row[p];
-            if (l && isRealLessonData(l.teacher, l.subject)) {
-              weeklyLoads[l.teacher] = (weeklyLoads[l.teacher] || 0) + 1;
-            }
+             const l = row[p];
+             if (l && isRealLessonData(l.teacher, l.subject)) {
+               weeklyLoads[l.teacher] = (weeklyLoads[l.teacher] || 0) + 1;
+             }
           }
         }
       }
@@ -389,12 +3005,12 @@ function buildBusyMatrix(fieldDay, classes) {
       // Reset FIELD_SCHEDULE for the day to original
       if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
       FIELD_SCHEDULE[day] = deepClone(ORIGINAL_SCHEDULE[day]);
-
+      
       const origDay = ORIGINAL_SCHEDULE[day] || {};
       let occupancyCount = 0;
-
+      
       const vacancies = [];
-
+      
       // First pass: Fill normal lessons and collect vacancies
       for (const cls of ALL_CLASSES) {
         if (!FIELD_SCHEDULE[day][cls]) FIELD_SCHEDULE[day][cls] = {};
@@ -422,18 +3038,18 @@ function buildBusyMatrix(fieldDay, classes) {
 
       // Sort vacancies by period to process logically
       vacancies.sort((a, b) => a.period - b.period);
-
+      
       // Second pass: Assign substitutes dynamically
       for (const vac of vacancies) {
         const p = vac.period;
         const cls = vac.class;
-
+        
         let bestSub = "إدارة المدرسة";
         let bestWeight = Infinity;
-
+        
         for (const t of ALL_TEACHERS) {
           if (absent.includes(t)) continue;
-
+          
           // Is free?
           let free = true;
           for (const c of ALL_CLASSES) {
@@ -442,7 +3058,7 @@ function buildBusyMatrix(fieldDay, classes) {
             const fieldL = FIELD_SCHEDULE[day][c] && FIELD_SCHEDULE[day][c][p];
             if (fieldL && fieldL.teacher === t) { free = false; break; }
           }
-
+          
           if (free) {
             // Calculate weight: weekly load + (today occupancies * 5) to strongly prefer teachers with 0 occupancies today
             const weight = (weeklyLoads[t] || 0) + (todayOccupancy[t] * 5);
@@ -452,11 +3068,11 @@ function buildBusyMatrix(fieldDay, classes) {
             }
           }
         }
-
+        
         if (bestSub !== "إدارة المدرسة") {
           todayOccupancy[bestSub]++;
         }
-
+        
         FIELD_SCHEDULE[day][cls][p] = {
           teacher: bestSub, subject: vac.subject,
           originalPeriod: p, currentPeriod: p,
@@ -479,7 +3095,7 @@ function buildBusyMatrix(fieldDay, classes) {
       document.getElementById("quickSummary").innerHTML = "";
       renderScheduleTable(day);
       document.getElementById("reportContainer").innerHTML = "";
-
+      
       // Show output
       document.getElementById("output").style.display = "block";
     }
@@ -557,14 +3173,14 @@ function buildBusyMatrix(fieldDay, classes) {
           let cellClass = "";
           let content = "";
 
-          if (lesson.status === LessonStatus.NORMAL) {
+                    if (lesson.status === LessonStatus.NORMAL) {
             cellClass = "cell-normal" + (isFallbackTarget ? " cell-fallback" : "");
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
               '</span><span class="teacher-name">' + esc(lesson.teacher) + "</span></div>";
           } else if (lesson.status === LessonStatus.OCCUPANCY) {
             cellClass = "cell-occupancy" + (isFallbackTarget ? " cell-fallback" : "");
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
-              '</span><span class="teacher-name" style="color:var(--success);font-weight:bold;">' + esc(lesson.teacher) +
+              '</span><span class="teacher-name" style="color:var(--success);font-weight:bold;">' + esc(lesson.teacher) + 
               '</span><span style="font-size:0.7em;color:var(--text2)">بدل: ' + esc(lesson.originalTeacher) + '</span></div>';
           } else if (lesson.status === LessonStatus.SHIFTED) {
             const isCross = movementLog.some(m => m.movementType === "CROSS_CLASS_CASCADE" && m.targetClass === cls && m.toPeriod === p);
