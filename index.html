@@ -827,10 +827,13 @@
         <div class="teacher-grid" id="teacherGrid"></div>
       </div>
       <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
-        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:2;min-width:150px;">
+        <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:1.5;min-width:120px;">
           <span id="runBtnLabel">⚡ تطبيق التعويض</span>
         </button>
-        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1.5;min-width:150px;margin-top:0;">
+        <button class="btn btn-primary" id="occupancyBtn" onclick="runOccupancy()" style="flex:1.5;min-width:120px; background:linear-gradient(135deg, var(--success), #10b981); box-shadow:0 4px 15px rgba(16,185,129,0.3);">
+          <span>👤 إشغال الحصص</span>
+        </button>
+        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1;min-width:120px;margin-top:0;">
           🖨️ طباعة جدول اليوم
         </button>
         <button class="btn btn-print" id="resetBtn" onclick="resetSelections()"
@@ -847,6 +850,9 @@
       <div class="legend no-print" id="legendBar">
         <div class="legend-item">
           <div class="legend-dot" style="background:var(--shifted)"></div> حصة منقولة
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:var(--success)"></div> إشغال بديل
         </div>
         <div class="legend-item">
           <div class="legend-dot" style="background:var(--absence)"></div> غياب
