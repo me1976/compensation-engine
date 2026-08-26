@@ -2995,9 +2995,11 @@
               
               if (typeof ashghalData !== 'undefined' && ashghalData[day] && ashghalData[day][periodName] && ashghalData[day][periodName][cls]) {
                 const record = ashghalData[day][periodName][cls];
-                if (record.sub1 && !absent.includes(record.sub1)) sub = record.sub1;
-                else if (record.sub2 && !absent.includes(record.sub2)) sub = record.sub2;
-                else if (record.sub3 && !absent.includes(record.sub3)) sub = record.sub3;
+                const isValid = (sub) => sub && sub.trim() !== "-" && sub.trim() !== "" && !absent.includes(sub);
+                
+                if (isValid(record.sub1)) sub = record.sub1;
+                else if (isValid(record.sub2)) sub = record.sub2;
+                else if (isValid(record.sub3)) sub = record.sub3;
               }
               
               FIELD_SCHEDULE[day][cls][p] = {
