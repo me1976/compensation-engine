@@ -622,28 +622,59 @@
 
       body.print-report .teacher-print-notice {
         display: block !important;
-        margin-top: 10px;
+        margin-top: 5px;
         border: 2px solid #1a1a2e;
-        padding: 10px;
+        padding: 6px;
         page-break-inside: avoid;
       }
 
+      body.print-report #reportContainer {
+        display: none !important;
+      }
+
+      body.print-report .header {
+        padding: 5px 8px;
+        margin-bottom: 4px;
+      }
+
+      body.print-report .schedule-section h2 {
+        margin: 2px 0 4px;
+        padding: 2px 0;
+      }
+
+      body.print-report .schedule-table {
+        font-size: 6.7pt;
+      }
+
+      body.print-report .schedule-table th,
+      body.print-report .schedule-table td {
+        padding: 2px 1px;
+      }
+
+      body.print-report .teacher-name {
+        font-size: 0.88em;
+      }
+
+      body.print-report .subject-name {
+        font-size: 0.78em;
+      }
+
       .teacher-print-notice h2 {
-        margin: 0 0 8px;
-        font-size: 11pt;
+        margin: 0 0 4px;
+        font-size: 9.5pt;
         color: #1a1a2e;
       }
 
       .teacher-print-notice table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 8pt;
+        font-size: 7pt;
       }
 
       .teacher-print-notice th,
       .teacher-print-notice td {
         border: 1px solid #777;
-        padding: 4px 6px;
+        padding: 2px 4px;
         text-align: right;
       }
 
@@ -3576,6 +3607,47 @@
       return "ضمن سلسلة تعويض حصة غياب";
     }
 
+    function buildTeacherPrintAlerts(day) {
+      const alerts = [];
+      for (const cls of ALL_CLASSES) {
+        const end = originalEndMap[cls] || 0;
+        const row = FIELD_SCHEDULE[day] && FIELD_SCHEDULE[day][cls];
+        if (!row) continue;
+        for (let p = 1; p < end; p++) {
+          const gap = row[p];
+          if (!gap || gap.status !== LessonStatus.SHIFT_EMPTY) continue;
+
+          const excluded = new Set();
+          const conflicts = new Set();
+          for (let q = p + 1; q <= end; q++) {
+            const candidate = row[q];
+            if (!isActiveLesson(candidate)) continue;
+            if (isExcludedFromAll(candidate.teacher)) {
+              excluded.add(candidate.teacher);
+              continue;
+            }
+            const busyClass = findClassOfTeacherAt(candidate.teacher, day, p);
+            if (busyClass && busyClass !== cls) {
+              conflicts.add(candidate.teacher + " لديه حصة في " + busyClass + " ح" + p);
+            }
+          }
+
+          let reason = "لم يوجد مسار قانوني لإغلاقه ضمن القيود الحالية";
+          if (excluded.size) reason = "المعلم " + Array.from(excluded).join("، ") + " مستثنى من الحركة";
+          else if (conflicts.size) reason = Array.from(conflicts).join("؛ ");
+          alerts.push('<div><strong>استعصاء ضغط — ' + esc(cls) + ' ح' + p + ':</strong> ' + esc(reason) + '.</div>');
+        }
+      }
+
+      for (const v of vacancies.filter(item => item.status === "FALLBACK")) {
+        alerts.push('<div><strong>استعصاء غياب — ' + esc(v.className) + ' ح' + v.period + ':</strong> ' +
+          esc(v.failureReason || "لم يوجد حل قانوني ضمن القيود الحالية") + '.</div>');
+      }
+
+      if (!alerts.length) return '<div><strong>الاستعصاءات:</strong> لا توجد استعصاءات أو فراغات داخلية متبقية.</div>';
+      return '<div><strong>تنبيهات ضرورية:</strong></div>' + alerts.join("");
+    }
+
     function buildTeacherPrintNotice(day) {
       const affected = absentList.map(teacher => {
         const teacherVacancies = vacancies.filter(v => v.absentTeacher === teacher);
@@ -3598,9 +3670,10 @@
       if (!rows) rows = '<tr><td colspan="6">لم تتطلب الحالة تحريك أي حصة.</td></tr>';
 
       return '<h2>بيان الغياب والحركات — موجّه للمعلمين</h2>' +
-        '<div style="margin-bottom:8px;line-height:1.7">' + affected + '</div>' +
+        '<div style="margin-bottom:4px;line-height:1.35">' + affected + '</div>' +
         '<table><thead><tr><th>المعلم المتحرك</th><th>المادة</th><th>الشعبة</th><th>من</th><th>إلى</th><th>سبب الحركة</th></tr></thead>' +
-        '<tbody>' + rows + '</tbody></table>';
+        '<tbody>' + rows + '</tbody></table>' +
+        '<div style="margin-top:4px;line-height:1.35;font-size:7.2pt">' + buildTeacherPrintAlerts(day) + '</div>';
     }
 
     function buildOccupancyPrintNotice(day) {
