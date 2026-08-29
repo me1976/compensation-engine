@@ -870,10 +870,6 @@
         <button class="btn btn-primary" id="runBtn" onclick="runCompensation()" style="flex:1.5;min-width:120px;">
           <span id="runBtnLabel">⚡ تطبيق التعويض</span>
         </button>
-        <button class="btn btn-primary" id="exceptionalBtn" onclick="runExceptionalCompensation()"
-          style="display:none;flex:1.5;min-width:180px;background:linear-gradient(135deg,#f59e0b,#d97706);box-shadow:0 4px 15px rgba(245,158,11,.3);">
-          <span>⚠️ حل استثنائي حتى الخامسة</span>
-        </button>
         <button class="btn btn-primary" id="occupancyBtn" onclick="runOccupancy()" style="flex:1.5;min-width:120px; background:linear-gradient(135deg, var(--success), #10b981); box-shadow:0 4px 15px rgba(16,185,129,0.3);">
           <span>👤 إشغال الحصص</span>
         </button>
@@ -3472,7 +3468,7 @@
     let engineRunTime = "";
     let lastIntegrity = null;
     let chainSeq = 0;
-    let engineOptions = { allowExceptionalReverse: false };
+    let engineOptions = { allowExceptionalReverse: true };
 
     // ============================================================
     // CONTROLLER (UI + Engine Bridge)
@@ -3568,12 +3564,12 @@
     function buildTeacherPrintNotice(day) {
       const affected = absentList.map(teacher => {
         const teacherVacancies = vacancies.filter(v => v.absentTeacher === teacher);
-        const byClass = {};
-        for (const v of teacherVacancies) {
-          if (!byClass[v.className]) byClass[v.className] = [];
-          byClass[v.className].push(v.period);
-        }
-        const classes = Object.keys(byClass).map(cls => cls + " (ح" + byClass[cls].sort((a, b) => a - b).join("، ح") + ")");
+        const classes = teacherVacancies.map(v => {
+          let result = "تم التعويض";
+          if (v.status === "SUCCESS_NO_ACTION") result = "نهاية دوام الشعبة — لا تحريك";
+          else if (v.status === "FALLBACK") result = "غير محلولة — تحتاج متابعة";
+          return v.className + " (ح" + v.period + ": " + result + ")";
+        });
         return '<div><strong>المعلم الغائب: ' + esc(teacher) + '</strong> — الشعب المتأثرة: ' +
           (classes.length ? classes.map(esc).join('، ') : 'لا توجد حصص متأثرة') + '</div>';
       }).join("");
@@ -4330,13 +4326,14 @@
     // ============================================================
     // runEngine
     // ============================================================
-    function runEngine(day, date, absentArray, options) {
+    function runEngine(day, date, absentArray) {
       const t0 = Date.now();
       if (!ORIGINAL_SCHEDULE[day]) throw new Error("يوم غير معروف: " + day);
       currentDay = day;
       currentDate = date || "";
       absentList = Array.from(new Set(absentArray || []));
-      engineOptions = { allowExceptionalReverse: !!(options && options.allowExceptionalReverse) };
+      // المراحل الثلاث تعمل آليًا؛ وتبقى الحركة العكسية مقيدة بالحد الخامس وفحوص السلامة.
+      engineOptions = { allowExceptionalReverse: true };
       originalScheduleSnapshot = JSON.stringify(ORIGINAL_SCHEDULE);
       movementLog = [];
       chains = [];
@@ -4500,7 +4497,7 @@
 
       return {
         ok: true,
-        meta: { day: day, date: currentDate, runAt: new Date().toISOString(), duration: engineRunTime, exceptionalMode: engineOptions.allowExceptionalReverse },
+        meta: { day: day, date: currentDate, runAt: new Date().toISOString(), duration: engineRunTime, automaticThreeStages: true },
         field: FIELD_SCHEDULE,
         classes: ALL_CLASSES.slice(),
         originalEnd: Object.assign({}, originalEndMap),
@@ -4592,14 +4589,16 @@
       if (!res) res = buildResults();
       const absent = res.absentees ? res.absentees.map(a => a.name) : absentList.slice();
       const fbs = chains.filter(c => c.status === "FALLBACK");
+      const noActions = chains.filter(c => c.status === "SUCCESS_NO_ACTION");
       const exceptionalMoves = movementLog.filter(m => m.movementType === "EXCEPTIONAL_REVERSE");
-      const modeLabel = res.meta && res.meta.exceptionalMode ? "استثنائي بعد التنبيه" : "عادي";
+      const modeLabel = "آلي كامل — المراحل الثلاث";
       let html = "";
 
       html += '<div class="report-section"><h2>📋 نتيجة التعويض</h2><div class="report-item">' +
         '<strong>' + esc(day) + ' — ' + esc(currentDate || "—") + '</strong><br>' +
         'الغائبون: ' + (absent.length ? absent.map(esc).join('، ') : 'لا يوجد') + '<br>' +
-        'الوضع: ' + modeLabel + ' — عُوِّضت <strong>' + res.stats.compensatedVacancies + '</strong> حصة، وبقيت <strong>' + fbs.length + '</strong> حالة تحتاج قرارًا.' +
+        'الوضع: ' + modeLabel + ' — عُوِّضت بالحركة <strong>' + res.stats.compensatedVacancies + '</strong> حصة، ووجدت <strong>' + noActions.length +
+        '</strong> حصة غياب في نهاية دوام شعبتها، وبقيت <strong>' + fbs.length + '</strong> حالة تحتاج قرارًا.' +
         '</div></div>';
 
       html += '<div class="report-section"><h2>🔄 الحركات المنفذة</h2>';
@@ -4612,9 +4611,18 @@
       html += '</div>';
 
       if (exceptionalMoves.length) {
-        html += '<div class="report-section"><h2>⚠️ الحل الاستثنائي</h2><div class="report-item" style="border-right:3px solid var(--warning)">' +
+        html += '<div class="report-section"><h2>⚠️ المرحلة الثالثة</h2><div class="report-item" style="border-right:3px solid var(--warning)">' +
           'استُخدمت ' + exceptionalMoves.length + ' حركة عكسية، ولم تتجاوز أي منها الحصة ' + ENGINE_CONFIG.EXCEPTIONAL_REVERSE_MAX_PERIOD +
-          '. هذا الحل لا يعمل في الوضع العادي، ويعرض النظام تنبيهًا قبل تشغيله.</div></div>';
+          '. طبّقها النظام آليًا بعد تعذر الحل في المرحلتين الأولى والثانية.</div></div>';
+      }
+
+      if (noActions.length) {
+        html += '<div class="report-section"><h2>🕒 حالات نهاية الدوام — بلا تحريك</h2>';
+        for (const c of noActions) {
+          html += '<div class="report-item"><strong>' + esc(c.className) + ' — الحصة ' + c.targetPeriod + '</strong> (غياب ' +
+            esc(c.absentTeacher) + ' — ' + esc(c.subject) + ') — الحصة تقع أصلًا في نهاية دوام الشعبة؛ لم تُنقل أي حصة.</div>';
+        }
+        html += '</div>';
       }
 
       html += '<div class="report-section"><h2>⚠️ الحالات غير المحلولة</h2>';
@@ -4633,6 +4641,7 @@
         statCard(s.absentTeachers, "معلمون غائبون") +
         statCard(s.affectedClasses, "شعب متأثرة") +
         statCard(s.compensatedVacancies, "حصص معوضة") +
+        statCard(s.noActionVacancies, "نهاية الدوام") +
         statCard(s.totalMovements, "إجمالي الحركات") +
         statCard(s.fallbacks, "تحتاج قرار") +
         '</div></div>';
@@ -4801,13 +4810,13 @@
       document.getElementById("quickSummary").innerHTML =
         '<div class="qs-item qs-neutral"><div class="qs-num">' + s.absentTeachers + '</div><div class="qs-lbl">معلمون غائبون</div></div>' +
         '<div class="qs-item qs-neutral"><div class="qs-num">' + s.affectedClasses + '</div><div class="qs-lbl">شعب متأثرة</div></div>' +
-        '<div class="qs-item qs-ok"><div class="qs-num">' + successCount + '</div><div class="qs-lbl">حصص عُوِّضت تلقائيًا</div></div>' +
+        '<div class="qs-item qs-ok"><div class="qs-num">' + successCount + '</div><div class="qs-lbl">حالات عولجت تلقائيًا</div></div>' +
         '<div class="qs-item ' + (s.fallbacks > 0 ? "qs-danger" : "qs-ok") + '"><div class="qs-num">' + s.fallbacks + '</div><div class="qs-lbl">استعصاءات تحتاج قرارًا</div></div>';
 
       const banner = document.getElementById("attentionBanner");
       if (s.fallbacks > 0) {
         banner.innerHTML = '<div class="attention-banner">⚠️ يوجد ' + s.fallbacks +
-          ' استعصاء لم يُحلّ تلقائيًا — راجع قسم "الاستعصاءات" أسفل التقرير لاتخاذ قرار إداري.</div>';
+          ' استعصاء لم يُحلّ تلقائيًا بعد المراحل الثلاث — راجع قسم "الحالات غير المحلولة" أسفل التقرير.</div>';
       } else if (s.partialSuccess > 0) {
         banner.innerHTML = '<div class="attention-banner" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.5);color:var(--warning)">' +
           '📌 يوجد ' + s.partialSuccess + ' فراغ ضغط داخلي متبقٍ (تمت التغطية لكن بقيت فجوة قبل نهاية الدوام) — راجع "الفراغات النهائية" للتفاصيل.</div>';
@@ -5064,7 +5073,7 @@
 
       let res;
       try {
-        res = runEngine(day, date, absent, { allowExceptionalReverse: false });
+        res = runEngine(day, date, absent);
       } catch (e) {
         alert("حدث خطأ أثناء المعالجة: " + e.message);
         if (btnLabel) btnLabel.textContent = originalLabel;
@@ -5079,38 +5088,6 @@
       renderQuickSummary(res);
       renderScheduleTable(day);
       document.getElementById("reportContainer").innerHTML = generateReport(day, res.integrity, res);
-      const exceptionalBtn = document.getElementById("exceptionalBtn");
-      if (exceptionalBtn) exceptionalBtn.style.display = res.stats.fallbacks > 0 ? "block" : "none";
-      document.getElementById("output").style.display = "block";
-      document.getElementById("output").scrollIntoView({ behavior: "smooth" });
-    }
-
-    function runExceptionalCompensation() {
-      const day = document.getElementById("daySelect").value;
-      if (!day) { alert("اختر اليوم أولًا"); return; }
-      const date = getSelectedDate() || "";
-      const absent = [];
-      document.querySelectorAll(".teacher-chip.selected").forEach(chip => absent.push(chip.dataset.teacher));
-      if (!absent.length) { alert("اختر معلمًا غائبًا واحدًا على الأقل"); return; }
-
-      alert(
-        "تنبيه: سيجرب النظام الآن الحل الاستثنائي، وقد ينقل حصة معلم من وقت مبكر إلى وقت متأخر " +
-        "بشرط ألا تتجاوز الوجهة الحصة الخامسة، ومن دون فقد أي حصة أو إنشاء تعارض."
-      );
-
-      let res;
-      try {
-        res = runEngine(day, date, absent, { allowExceptionalReverse: true });
-      } catch (e) {
-        alert("حدث خطأ أثناء الحل الاستثنائي: " + e.message);
-        return;
-      }
-      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
-      renderQuickSummary(res);
-      renderScheduleTable(day);
-      document.getElementById("reportContainer").innerHTML = generateReport(day, res.integrity, res);
-      const exceptionalBtn = document.getElementById("exceptionalBtn");
-      if (exceptionalBtn) exceptionalBtn.style.display = res.stats.fallbacks > 0 ? "block" : "none";
       document.getElementById("output").style.display = "block";
       document.getElementById("output").scrollIntoView({ behavior: "smooth" });
     }
@@ -5126,8 +5103,6 @@
       document.getElementById("scheduleTableWrapper").innerHTML = "";
       document.getElementById("reportContainer").innerHTML = "";
       document.getElementById("teacherPrintNotice").innerHTML = "";
-      const exceptionalBtn = document.getElementById("exceptionalBtn");
-      if (exceptionalBtn) exceptionalBtn.style.display = "none";
       const filterInput = document.getElementById("teacherFilter");
       if (filterInput) {
         filterInput.value = "";
