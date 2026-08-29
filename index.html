@@ -116,6 +116,23 @@
       cursor: pointer;
     }
 
+    .derived-day:disabled {
+      opacity: 1;
+      cursor: default;
+      color: var(--text);
+      background: var(--bg3);
+    }
+
+    .no-school-day {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      border-radius: 8px;
+      background: rgba(245, 158, 11, 0.1);
+      color: #92400e;
+      font-weight: 700;
+    }
+
     .date-input {
       width: 100%;
       padding: 10px 14px;
@@ -873,14 +890,15 @@
     <div class="controls no-print">
       <div style="display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap;">
         <div class="control-group" style="flex:1; margin-bottom:0; min-width:150px;">
-          <label>📅 اليوم</label>
-          <select class="day-select" id="daySelect">
-            <option value="">— اختر اليوم —</option>
+          <label>📅 اليوم (يُحدَّد تلقائيًا)</label>
+          <select class="day-select derived-day" id="daySelect" disabled aria-label="اليوم المستنتج من التاريخ">
             <option value="الأحد">الأحد</option>
             <option value="الاثنين">الاثنين</option>
             <option value="الثلاثاء">الثلاثاء</option>
             <option value="الأربعاء">الأربعاء</option>
             <option value="الخميس">الخميس</option>
+            <option value="الجمعة">الجمعة</option>
+            <option value="السبت">السبت</option>
           </select>
         </div>
         <div class="control-group" style="flex:2; margin-bottom:0; min-width:250px;">
@@ -905,7 +923,7 @@
         <button class="btn btn-primary" id="occupancyBtn" onclick="runOccupancy()" style="flex:1.5;min-width:120px; background:linear-gradient(135deg, var(--success), #10b981); box-shadow:0 4px 15px rgba(16,185,129,0.3);">
           <span>👤 إشغال الحصص</span>
         </button>
-        <button class="btn btn-print" onclick="printOriginalSchedule()" style="flex:1;min-width:120px;margin-top:0;">
+        <button class="btn btn-print" id="printOriginalBtn" onclick="printOriginalSchedule()" style="flex:1;min-width:120px;margin-top:0;">
           🖨️ طباعة جدول اليوم
         </button>
         <button class="btn btn-print" id="resetBtn" onclick="resetSelections()"
@@ -3553,7 +3571,7 @@
       const headerTitle = document.querySelector('.header h1');
       const originalTitle = headerTitle.innerHTML;
       headerTitle.innerHTML = 'جدول الدروس اليومي الأصلي';
-      dateDisplay.textContent = day + " — " + (getSelectedDate() || "—");
+      updateDateDisplay();
       renderScheduleTable(day);
       report.innerHTML = "";
       notice.innerHTML = "";
@@ -4857,7 +4875,7 @@
       let html = "";
 
       html += '<div class="report-section"><h2>📋 نتيجة التعويض</h2><div class="report-item">' +
-        '<strong>' + esc(day) + ' — ' + esc(currentDate || "—") + '</strong><br>' +
+        '<strong>' + esc(day) + ' — ' + esc(getSelectedDateArabic() || currentDate || "—") + '</strong><br>' +
         'الغائبون: ' + (absent.length ? absent.map(esc).join('، ') : 'لا يوجد') + '<br>' +
         'الوضع: ' + modeLabel + ' — عُوِّضت بالحركة <strong>' + res.stats.compensatedVacancies + '</strong> حصة، ووجدت <strong>' + noActions.length +
         '</strong> حصة غياب في نهاية دوام شعبتها، وبقيت <strong>' + fbs.length + '</strong> حالة تحتاج قرارًا.' +
@@ -4952,16 +4970,10 @@
     // UI CONTROLLER
     // ============================================================
     function init() {
-      const daySelect = document.getElementById("dateDay");
+      const dateDaySelect = document.getElementById("dateDay");
       const monthSelect = document.getElementById("dateMonth");
       const yearSelect = document.getElementById("dateYear");
 
-      for (let d = 1; d <= 31; d++) {
-        const o = document.createElement("option");
-        o.value = d;
-        o.textContent = d;
-        daySelect.appendChild(o);
-      }
       const months = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"];
       months.forEach(function (m, i) {
         const o = document.createElement("option");
@@ -4978,28 +4990,62 @@
       }
 
       const today = new Date();
-      daySelect.value = today.getDate();
       monthSelect.value = today.getMonth() + 1;
       yearSelect.value = today.getFullYear();
-      updateDateDisplay();
+      rebuildDateDays(today.getDate());
+      syncDayFromDate();
 
-      const dayMap = { 0: "الأحد", 1: "الاثنين", 2: "الثلاثاء", 3: "الأربعاء", 4: "الخميس", 5: "الجمعة", 6: "السبت" };
-      const todayDay = dayMap[today.getDay()];
-      if (todayDay && ORIGINAL_SCHEDULE[todayDay]) {
-        document.getElementById("daySelect").value = todayDay;
-      }
-
-      renderTeacherChips();
-      document.getElementById("daySelect").addEventListener("change", function () {
-        updateDateDisplay();
-        renderTeacherChips();
-        applyTeacherFilter();
+      dateDaySelect.addEventListener("change", syncDayFromDate);
+      monthSelect.addEventListener("change", function () {
+        rebuildDateDays(parseInt(dateDaySelect.value) || 1);
+        syncDayFromDate();
       });
-      daySelect.addEventListener("change", updateDateDisplay);
-      monthSelect.addEventListener("change", updateDateDisplay);
-      yearSelect.addEventListener("change", updateDateDisplay);
+      yearSelect.addEventListener("change", function () {
+        rebuildDateDays(parseInt(dateDaySelect.value) || 1);
+        syncDayFromDate();
+      });
       const filterInput = document.getElementById("teacherFilter");
       if (filterInput) filterInput.addEventListener("input", applyTeacherFilter);
+    }
+
+    function rebuildDateDays(preferredDay) {
+      const daySelect = document.getElementById("dateDay");
+      const month = parseInt(document.getElementById("dateMonth").value);
+      const year = parseInt(document.getElementById("dateYear").value);
+      if (!month || !year) return;
+      const maxDay = new Date(year, month, 0).getDate();
+      const selected = Math.min(Math.max(parseInt(preferredDay) || 1, 1), maxDay);
+      daySelect.innerHTML = "";
+      for (let d = 1; d <= maxDay; d++) {
+        const option = document.createElement("option");
+        option.value = d;
+        option.textContent = d;
+        daySelect.appendChild(option);
+      }
+      daySelect.value = selected;
+    }
+
+    function syncDayFromDate() {
+      const d = parseInt(document.getElementById("dateDay").value);
+      const m = parseInt(document.getElementById("dateMonth").value);
+      const y = parseInt(document.getElementById("dateYear").value);
+      if (!d || !m || !y) return;
+      const date = new Date(y, m - 1, d);
+      const dayMap = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+      const day = dayMap[date.getDay()];
+      document.getElementById("daySelect").value = day;
+
+      const hasSchedule = !!ORIGINAL_SCHEDULE[day];
+      ["runBtn", "occupancyBtn", "printOriginalBtn"].forEach(function (id) {
+        const button = document.getElementById(id);
+        if (button) button.disabled = !hasSchedule;
+      });
+      const filterInput = document.getElementById("teacherFilter");
+      if (filterInput) filterInput.disabled = !hasSchedule;
+
+      updateDateDisplay();
+      renderTeacherChips();
+      applyTeacherFilter();
     }
 
     function applyTeacherFilter() {
@@ -5032,7 +5078,7 @@
       const day = document.getElementById("daySelect").value;
       const dateAr = getSelectedDateArabic();
       const display = document.getElementById("dateDisplay");
-      if (day && dateAr) display.textContent = day + " — " + dateAr;
+      if (day && dateAr) display.textContent = day + " — " + dateAr + (ORIGINAL_SCHEDULE[day] ? "" : " — لا يوجد جدول دراسي");
       else if (day) display.textContent = day;
       else display.textContent = "";
     }
@@ -5055,6 +5101,11 @@
       const grid = document.getElementById("teacherGrid");
       grid.innerHTML = "";
       const day = document.getElementById("daySelect").value;
+      if (!ORIGINAL_SCHEDULE[day]) {
+        grid.innerHTML = '<div class="no-school-day">لا يوجد جدول دراسي في ' + esc(day || "هذا اليوم") + '.</div>';
+        document.getElementById("absentCount").textContent = "";
+        return;
+      }
       const loads = dayLoads(day);
       for (const t of ALL_TEACHERS) {
           if (isExcludedFromAll(t)) continue;
@@ -5328,7 +5379,7 @@
       }
 
       document.getElementById("quickSummary").innerHTML = "";
-      document.getElementById("dateDisplay").textContent = day + " — " + (currentDate || "—");
+      updateDateDisplay();
       renderScheduleTable(day);
       document.getElementById("reportContainer").innerHTML = "";
       document.getElementById("output").style.display = "block";
@@ -5337,6 +5388,7 @@
     function runCompensation() {
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("اختر اليوم أولًا"); return; }
+      if (!ORIGINAL_SCHEDULE[day]) { alert("لا يوجد جدول دراسي في اليوم الموافق للتاريخ المختار"); return; }
       const date = getSelectedDate() || "";
       const absent = [];
       document.querySelectorAll(".teacher-chip.selected").forEach(chip => absent.push(chip.dataset.teacher));
@@ -5360,7 +5412,7 @@
       if (btnLabel) btnLabel.textContent = originalLabel;
       if (runBtn) runBtn.disabled = false;
 
-      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
+      updateDateDisplay();
 
       renderQuickSummary(res);
       renderScheduleTable(day);
@@ -5380,7 +5432,7 @@
       document.getElementById("scheduleTableWrapper").innerHTML = "";
       document.getElementById("reportContainer").innerHTML = "";
       document.getElementById("teacherPrintNotice").innerHTML = "";
-      document.getElementById("dateDisplay").textContent = "";
+      updateDateDisplay();
       document.body.classList.remove("print-original", "print-report");
       FIELD_SCHEDULE = null;
       absentList = [];
