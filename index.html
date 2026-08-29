@@ -942,19 +942,19 @@
           <div class="legend-dot" style="background:var(--shifted)"></div> حصة منقولة
         </div>
         <div class="legend-item">
-          <div class="legend-dot" style="background:var(--success)"></div> إشغال بديل
+          <div class="legend-dot" style="background:var(--success)"></div> إشغال ناجح
         </div>
         <div class="legend-item">
-          <div class="legend-dot" style="background:var(--absence)"></div> غياب
+          <div class="legend-dot" style="background:var(--absence)"></div> غياب نهاية الدوام
         </div>
         <div class="legend-item">
-          <div class="legend-dot" style="background:var(--shift-empty)"></div> فراغ نقل
+          <div class="legend-dot" style="background:var(--shift-empty)"></div> فراغ نهاية الدوام
         </div>
         <div class="legend-item">
           <div class="legend-dot" style="background:var(--cross)"></div> عابر للشعب
         </div>
         <div class="legend-item">
-          <div class="legend-dot" style="background:var(--fallback)"></div> استعصاء
+          <div class="legend-dot" style="background:var(--fallback)"></div> استعصاء تعويض/ضغط/إشغال
         </div>
       </div>
 
@@ -3625,6 +3625,29 @@
       return "ضمن سلسلة تعويض حصة غياب";
     }
 
+    function describePressureGap(day, cls, period) {
+      const end = originalEndMap[cls] || 0;
+      const row = FIELD_SCHEDULE[day] && FIELD_SCHEDULE[day][cls];
+      if (!row) return "لم يوجد مسار قانوني لإغلاقه ضمن القيود الحالية";
+      const excluded = new Set();
+      const conflicts = new Set();
+      for (let q = period + 1; q <= end; q++) {
+        const candidate = row[q];
+        if (!isActiveLesson(candidate)) continue;
+        if (isExcludedFromAll(candidate.teacher)) {
+          excluded.add(candidate.teacher);
+          continue;
+        }
+        const busyClass = findClassOfTeacherAt(candidate.teacher, day, period);
+        if (busyClass && busyClass !== cls) {
+          conflicts.add(candidate.teacher + " لديه حصة في " + busyClass + " ح" + period);
+        }
+      }
+      if (excluded.size) return "المعلم " + Array.from(excluded).join("، ") + " مستثنى من الحركة";
+      if (conflicts.size) return Array.from(conflicts).join("؛ ");
+      return "لم يوجد مسار قانوني لإغلاقه ضمن القيود الحالية";
+    }
+
     function buildTeacherPrintAlerts(day) {
       const alerts = [];
       for (const cls of ALL_CLASSES) {
@@ -3634,32 +3657,13 @@
         for (let p = 1; p < end; p++) {
           const gap = row[p];
           if (!gap || gap.status !== LessonStatus.SHIFT_EMPTY) continue;
-
-          const excluded = new Set();
-          const conflicts = new Set();
-          for (let q = p + 1; q <= end; q++) {
-            const candidate = row[q];
-            if (!isActiveLesson(candidate)) continue;
-            if (isExcludedFromAll(candidate.teacher)) {
-              excluded.add(candidate.teacher);
-              continue;
-            }
-            const busyClass = findClassOfTeacherAt(candidate.teacher, day, p);
-            if (busyClass && busyClass !== cls) {
-              conflicts.add(candidate.teacher + " لديه حصة في " + busyClass + " ح" + p);
-            }
-          }
-
-          let reason = "لم يوجد مسار قانوني لإغلاقه ضمن القيود الحالية";
-          if (excluded.size) reason = "المعلم " + Array.from(excluded).join("، ") + " مستثنى من الحركة";
-          else if (conflicts.size) reason = Array.from(conflicts).join("؛ ");
-          alerts.push('<div><strong>استعصاء ضغط — ' + esc(cls) + ' ح' + p + ':</strong> ' + esc(reason) + '.</div>');
+          alerts.push('<div><strong>استعصاء ضغط — ' + esc(cls) + ' ح' + p + ':</strong> ' + esc(describePressureGap(day, cls, p)) + '.</div>');
         }
       }
 
       for (const v of vacancies.filter(item => item.status === "FALLBACK")) {
-        alerts.push('<div><strong>استعصاء غياب — ' + esc(v.className) + ' ح' + v.period + ':</strong> ' +
-          esc(v.failureReason || "لم يوجد حل قانوني ضمن القيود الحالية") + '.</div>');
+        alerts.push('<div><strong>استعصاء تعويض — ' + esc(v.className) + ' ح' + v.period + ':</strong> غياب ' +
+          esc(v.absentTeacher) + ' لم يُغطَّ بالحركة؛ ' + esc(v.failureReason || "لم يوجد حل قانوني ضمن القيود الحالية") + '.</div>');
       }
 
       if (!alerts.length) return '<div><strong>الاستعصاءات:</strong> لا توجد استعصاءات أو فراغات داخلية متبقية.</div>';
@@ -3671,8 +3675,8 @@
         const teacherVacancies = vacancies.filter(v => v.absentTeacher === teacher);
         const classes = teacherVacancies.map(v => {
           let result = "تم التعويض";
-          if (v.status === "SUCCESS_NO_ACTION") result = "نهاية دوام الشعبة — لا تحريك";
-          else if (v.status === "FALLBACK") result = "غير محلولة — تحتاج متابعة";
+          if (v.status === "SUCCESS_NO_ACTION") result = "غياب نهاية الدوام — لا حركة مطلوبة";
+          else if (v.status === "FALLBACK") result = "استعصاء تعويض — لم تُغطَّ بالحركة";
           return v.className + " (ح" + v.period + ": " + result + ")";
         });
         return '<div><strong>المعلم الغائب: ' + esc(teacher) + '</strong> — الشعب المتأثرة: ' +
@@ -3706,7 +3710,7 @@
         for (let p = 1; p <= 7; p++) {
           const cell = FIELD_SCHEDULE[day] && FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][p];
           if (!cell || (cell.status !== LessonStatus.OCCUPANCY && cell.status !== LessonStatus.UNAVAILABLE)) continue;
-          const result = cell.status === LessonStatus.OCCUPANCY ? cell.teacher : "بلا معلم متاح";
+          const result = cell.status === LessonStatus.OCCUPANCY ? "إشغال ناجح — " + cell.teacher : "استعصاء إشغال — بلا معلم متاح";
           const originalTeacher = cell.originalTeacher || cell.absentTeacher || "—";
           rows += '<tr><td>' + esc(originalTeacher) + '</td><td>' + esc(cls) + '</td><td>الحصة ' + p +
             '</td><td>' + esc(cell.subject || cell.absentSubject || "—") + '</td><td>' + esc(result) + '</td></tr>';
@@ -4841,20 +4845,16 @@
     // REPORT GENERATOR
     // ============================================================
     function getStatusBadge(status, completion) {
-      const partialMark = completion === "PARTIAL" ? " — مع فراغ متبقٍ ⚠" : "";
+      const partialMark = completion === "PARTIAL" ? " — مع استعصاء ضغط ⚠" : "";
       const map = {
         "SUCCESS_DIRECT": '<span class="status-badge status-success">سحب مباشر ✓' + partialMark + "</span>",
         "SUCCESS_RIPPLE": '<span class="status-badge status-success">تبديل داخلي ✓' + partialMark + "</span>",
         "SUCCESS_EXCEPTIONAL": '<span class="status-badge status-success">المرحلة الثالثة ✓' + partialMark + "</span>",
-        "SUCCESS_NO_ACTION": '<span class="status-badge status-noaction">فراغ محظوظ ✓</span>',
-        "FALLBACK": '<span class="status-badge status-fallback">يحتاج قرار ✗</span>',
+        "SUCCESS_NO_ACTION": '<span class="status-badge status-noaction">غياب نهاية الدوام ✓</span>',
+        "FALLBACK": '<span class="status-badge status-fallback">استعصاء تعويض ✗</span>',
         "PENDING": '<span class="status-badge">قيد المعالجة</span>'
       };
       return map[status] || status;
-    }
-
-    function gapTypeLabel(type) {
-      return type === LessonStatus.ABSENCE_EMPTY ? "فراغ غياب (غير معوض)" : "فراغ نقل (ضغط دوام)";
     }
 
     function esc(s) {
@@ -4868,6 +4868,7 @@
       const absent = res.absentees ? res.absentees.map(a => a.name) : absentList.slice();
       const fbs = chains.filter(c => c.status === "FALLBACK");
       const noActions = chains.filter(c => c.status === "SUCCESS_NO_ACTION");
+      const pressureGaps = (res.finalGaps || []).filter(g => g.type === LessonStatus.SHIFT_EMPTY && g.needsAttention);
       const exceptionalMoves = movementLog.filter(m => m.movementType === "EXCEPTIONAL_REVERSE");
       const searchInfo = res.meta && res.meta.globalSearch;
       const modeLabel = searchInfo && searchInfo.status === "OPTIMAL_MODELED" ?
@@ -4878,7 +4879,7 @@
         '<strong>' + esc(day) + ' — ' + esc(getSelectedDateArabic() || currentDate || "—") + '</strong><br>' +
         'الغائبون: ' + (absent.length ? absent.map(esc).join('، ') : 'لا يوجد') + '<br>' +
         'الوضع: ' + modeLabel + ' — عُوِّضت بالحركة <strong>' + res.stats.compensatedVacancies + '</strong> حصة، ووجدت <strong>' + noActions.length +
-        '</strong> حصة غياب في نهاية دوام شعبتها، وبقيت <strong>' + fbs.length + '</strong> حالة تحتاج قرارًا.' +
+        '</strong> حالة غياب نهاية دوام، وبقي <strong>' + fbs.length + '</strong> استعصاء تعويض و<strong>' + pressureGaps.length + '</strong> استعصاء ضغط.' +
         '</div></div>';
 
       if (searchInfo) {
@@ -4907,7 +4908,7 @@
       }
 
       if (noActions.length) {
-        html += '<div class="report-section"><h2>🕒 حالات نهاية الدوام — بلا تحريك</h2>';
+        html += '<div class="report-section"><h2>🕒 غياب نهاية الدوام — لا حركة مطلوبة</h2>';
         for (const c of noActions) {
           html += '<div class="report-item"><strong>' + esc(c.className) + ' — الحصة ' + c.targetPeriod + '</strong> (غياب ' +
             esc(c.absentTeacher) + ' — ' + esc(c.subject) + ') — الحصة تقع أصلًا في نهاية دوام الشعبة؛ لم تُنقل أي حصة.</div>';
@@ -4915,13 +4916,24 @@
         html += '</div>';
       }
 
-      html += '<div class="report-section"><h2>⚠️ الحالات غير المحلولة</h2>';
-      if (!fbs.length) html += '<div class="report-item" style="color:var(--success)">لا توجد حالات استعصاء ✓</div>';
+      html += '<div class="report-section"><h2>⚠️ استعصاءات التعويض</h2>';
+      if (!fbs.length) html += '<div class="report-item" style="color:var(--success)">لا توجد استعصاءات تعويض ✓</div>';
       else {
         for (const f of fbs) {
           html += '<div class="report-item" style="border-right:3px solid var(--fallback)">' +
-            '<strong>' + esc(f.className) + ' — الحصة ' + f.targetPeriod + '</strong> (غياب ' + esc(f.absentTeacher) +
-            ' — ' + esc(f.subject) + ') — لا يوجد حل يحقق القيود المعتمدة.</div>';
+            '<strong>استعصاء تعويض — ' + esc(f.className) + ' ح' + f.targetPeriod + ':</strong> غياب ' + esc(f.absentTeacher) +
+            ' — ' + esc(f.subject) + '؛ بقيت الحصة دون تغطية بالحركة لأن لا حل يحقق القيود المعتمدة.</div>';
+        }
+      }
+      html += '</div>';
+
+      html += '<div class="report-section"><h2>⚠️ استعصاءات الضغط</h2>';
+      if (!pressureGaps.length) html += '<div class="report-item" style="color:var(--success)">لا توجد استعصاءات ضغط ✓</div>';
+      else {
+        for (const g of pressureGaps) {
+          html += '<div class="report-item" style="border-right:3px solid var(--warning)">' +
+            '<strong>استعصاء ضغط — ' + esc(g.className) + ' ح' + g.period + ':</strong> عُوِّضت حصة الغياب، لكن بقي فراغ داخلي؛ ' +
+            esc(describePressureGap(day, g.className, g.period)) + '.</div>';
         }
       }
       html += '</div>';
@@ -4931,16 +4943,17 @@
         statCard(s.absentTeachers, "معلمون غائبون") +
         statCard(s.affectedClasses, "شعب متأثرة") +
         statCard(s.compensatedVacancies, "حصص معوضة") +
-        statCard(s.noActionVacancies, "نهاية الدوام") +
+        statCard(s.noActionVacancies, "غياب نهاية الدوام") +
+        statCard(pressureGaps.length, "استعصاء ضغط") +
         statCard(s.totalMovements, "إجمالي الحركات") +
-        statCard(s.fallbacks, "تحتاج قرار") +
+        statCard(s.fallbacks, "استعصاء تعويض") +
         '</div></div>';
 
       html += '<details class="report-section"><summary style="cursor:pointer;font-weight:800;font-size:1.05rem">التفاصيل الفنية (للتدقيق فقط)</summary>' +
         '<div class="report-item">مدة الحساب: ' + esc(engineRunTime) + ' — فحص السلامة: ' +
         (integrity && integrity.allPassed ? 'ناجح ✓' : 'غير ناجح') + '<br>' +
         'السحب المباشر: ' + s.directMoves + '، الدفع الداخلي: ' + s.rippleMoves +
-        '، سلاسل المرحلة الثالثة: ' + s.crossClassChains + '، الفراغات النهائية: ' + s.finalGaps + '.</div>';
+        '، سلاسل المرحلة الثالثة: ' + s.crossClassChains + '، إجمالي الخانات غير المشغولة النهائية: ' + s.finalGaps + '.</div>';
       for (const f of fbs) {
         html += '<div class="report-item"><strong>' + esc(f.className) + ' ح' + f.targetPeriod + ':</strong> ' +
           esc(f.failureReason || "لم يوجد مسار قانوني ضمن القيود") + '</div>';
@@ -5133,19 +5146,19 @@
       document.getElementById("quickSummary").innerHTML =
         '<div class="qs-item qs-neutral"><div class="qs-num">' + s.absentTeachers + '</div><div class="qs-lbl">معلمون غائبون</div></div>' +
         '<div class="qs-item qs-neutral"><div class="qs-num">' + s.affectedClasses + '</div><div class="qs-lbl">شعب متأثرة</div></div>' +
-        '<div class="qs-item qs-ok"><div class="qs-num">' + successCount + '</div><div class="qs-lbl">حالات عولجت تلقائيًا</div></div>' +
-        '<div class="qs-item ' + (s.fallbacks > 0 ? "qs-danger" : "qs-ok") + '"><div class="qs-num">' + s.fallbacks + '</div><div class="qs-lbl">استعصاءات تحتاج قرارًا</div></div>';
+        '<div class="qs-item qs-ok"><div class="qs-num">' + successCount + '</div><div class="qs-lbl">حصص غياب عولجت</div></div>' +
+        '<div class="qs-item ' + (s.fallbacks > 0 ? "qs-danger" : "qs-ok") + '"><div class="qs-num">' + s.fallbacks + '</div><div class="qs-lbl">استعصاءات تعويض</div></div>';
 
       const banner = document.getElementById("attentionBanner");
+      const pressureCount = (res.finalGaps || []).filter(g => g.type === LessonStatus.SHIFT_EMPTY && g.needsAttention).length;
+      const notices = [];
       if (s.fallbacks > 0) {
-        banner.innerHTML = '<div class="attention-banner">⚠️ يوجد ' + s.fallbacks +
-          ' استعصاء لم يُحلّ تلقائيًا بعد المراحل الثلاث — راجع قسم "الحالات غير المحلولة" أسفل التقرير.</div>';
-      } else if (s.partialSuccess > 0) {
-        banner.innerHTML = '<div class="attention-banner" style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.5);color:var(--warning)">' +
-          '📌 يوجد ' + s.partialSuccess + ' فراغ ضغط داخلي متبقٍ (تمت التغطية لكن بقيت فجوة قبل نهاية الدوام) — راجع "الفراغات النهائية" للتفاصيل.</div>';
-      } else {
-        banner.innerHTML = '';
+        notices.push('⚠️ يوجد <strong>' + s.fallbacks + '</strong> استعصاء تعويض: بقيت حصة غياب دون تغطية بالحركة بعد المراحل الثلاث.');
       }
+      if (pressureCount > 0) {
+        notices.push('📌 يوجد <strong>' + pressureCount + '</strong> استعصاء ضغط: غُطيت حصة الغياب لكن بقي فراغ داخلي قبل نهاية الدوام.');
+      }
+      banner.innerHTML = notices.length ? '<div class="attention-banner"' + (s.fallbacks ? '' : ' style="background:rgba(251,191,36,0.12);border-color:rgba(251,191,36,0.5);color:var(--warning)"') + '>' + notices.join('<br>') + '</div>' : '';
     }
 
     function buildBusyMatrix(fieldDay, classes) {
@@ -5369,8 +5382,8 @@
       if (uncovered.length) {
         banner.innerHTML =
           '<div class="attention-banner">⚠️ تم تغطية ' + occupancyCount +
-          ' حصة. بقيت <strong>' + uncovered.length +
-          '</strong> حصة بلا معلم متاح (نقص بالتوظيف) — تحتاج قرارًا إداريًا: ' +
+          ' حصة. يوجد <strong>' + uncovered.length +
+          '</strong> استعصاء إشغال: لم يوجد معلم بديل مؤهل ضمن القيود في ' +
           uncovered.map(u => esc(u.class) + ' ح' + u.period).join("، ") + '</div>';
       } else {
         banner.innerHTML =
@@ -5472,7 +5485,8 @@
           const lesson = FIELD_SCHEDULE[day][cls][p];
           if (!lesson) { html += '<td class="cell-empty-original">—</td>'; continue; }
 
-          const isFallbackTarget = vacancies.some(v => v.status === "FALLBACK" && v.className === cls && v.period === p);
+          const vacancyState = vacancies.find(v => (v.className || v.class) === cls && v.period === p);
+          const isFallbackTarget = !!vacancyState && vacancyState.status === "FALLBACK";
 
           let cellClass = "";
           let content = "";
@@ -5485,7 +5499,8 @@
             cellClass = "cell-occupancy" + (isFallbackTarget ? " cell-fallback" : "");
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
               '</span><span class="teacher-name" style="color:var(--success);font-weight:bold;">' + esc(lesson.teacher) + 
-              '</span><span style="font-size:0.7em;color:var(--text2)">بدل: ' + esc(lesson.originalTeacher) + '</span></div>';
+              '</span><span style="font-size:0.7em;color:var(--success);font-weight:700">إشغال ناجح</span>' +
+              '<span style="font-size:0.7em;color:var(--text2)">بدل: ' + esc(lesson.originalTeacher) + '</span></div>';
           } else if (lesson.status === LessonStatus.SHIFTED) {
             const isCross = movementLog.some(m =>
               (m.movementType === "EXCEPTIONAL_CROSS_CLASS" || m.movementType === "EXCEPTIONAL_REVERSE") &&
@@ -5500,17 +5515,22 @@
               '<span style="font-size:0.65em;color:var(--text2)">من ' + lesson.originalPeriod + "</span></div>";
           } else if (lesson.status === LessonStatus.ABSENCE_EMPTY) {
             cellClass = "cell-absence-empty" + (isFallbackTarget ? " cell-fallback" : "");
-            content = '<div class="cell-info"><span style="font-size:1.1em">🚫</span><span>غياب</span>' +
+            const isEndAbsence = !!vacancyState && vacancyState.status === "SUCCESS_NO_ACTION";
+            const absenceLabel = isFallbackTarget ? "استعصاء تعويض" : isEndAbsence ? "غياب نهاية الدوام" : "غياب قيد المعالجة";
+            const absenceIcon = isFallbackTarget ? "⚠️" : isEndAbsence ? "🕒" : "🚫";
+            content = '<div class="cell-info"><span style="font-size:1.1em">' + absenceIcon + '</span><span>' + absenceLabel + '</span>' +
+              (lesson.absentTeacher ? '<span class="teacher-name">' + esc(lesson.absentTeacher) + '</span>' : '') +
               (lesson.absentSubject ? '<span style="font-size:0.65em;color:var(--text2)">' + esc(lesson.absentSubject) + "</span>" : "") + "</div>";
           } else if (lesson.status === LessonStatus.UNAVAILABLE) {
             cellClass = "cell-absence-empty";
-            content = '<div class="cell-info"><span style="font-size:1.1em">⚠️</span><span>بلا معلم متاح</span>' +
+            content = '<div class="cell-info"><span style="font-size:1.1em">⚠️</span><span>استعصاء إشغال</span>' +
+              (lesson.absentTeacher ? '<span class="teacher-name">' + esc(lesson.absentTeacher) + '</span>' : '') +
               (lesson.subject ? '<span style="font-size:0.65em;color:var(--text2)">' + esc(lesson.subject) + "</span>" : "") + "</div>";
           } else if (lesson.status === LessonStatus.SHIFT_EMPTY) {
             const internalGap = p < originalEndMap[cls];
             cellClass = "cell-shift-empty";
             content = '<div class="cell-info"><span style="font-size:1em">' + (internalGap ? "⚠" : "⬜") +
-              '</span><span>فراغ نقل' + (internalGap ? " متبقٍ" : "") + "</span></div>";
+              '</span><span>' + (internalGap ? "استعصاء ضغط" : "فراغ نهاية الدوام") + "</span></div>";
           } else {
             cellClass = "cell-empty-original";
             content = "—";
