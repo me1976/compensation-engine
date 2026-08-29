@@ -7,25 +7,25 @@
   <title>محرك تعويض الحصص المدرسي </title>
   <style>
     :root {
-      --bg: #0f172a;
-      --bg2: #1e293b;
-      --bg3: #334155;
-      --surface: #1e293b;
-      --border: #475569;
-      --text: #f1f5f9;
-      --text2: #94a3b8;
-      --accent: #38bdf8;
-      --accent2: #818cf8;
-      --success: #34d399;
-      --warning: #fbbf24;
-      --danger: #f87171;
+      --bg: #f3f6fb;
+      --bg2: #eef4fb;
+      --bg3: #f8fafc;
+      --surface: #ffffff;
+      --border: #d8e1ec;
+      --text: #172033;
+      --text2: #64748b;
+      --accent: #0369a1;
+      --accent2: #4f46e5;
+      --success: #059669;
+      --warning: #b45309;
+      --danger: #dc2626;
       --shifted: #7c3aed;
       --absence: #ef4444;
       --shift-empty: #f59e0b;
       --cross: #06b6d4;
       --fallback: #f43f5e;
       --radius: 10px;
-      --shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
     }
 
     * {
@@ -49,7 +49,7 @@
     }
 
     .header {
-      background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+      background: linear-gradient(135deg, #ffffff 0%, #e8f3ff 100%);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px;
@@ -615,11 +615,12 @@
         display: none !important;
       }
 
-      body.print-schedule #reportContainer {
+      body.print-original #reportContainer,
+      body.print-original .teacher-print-notice {
         display: none !important;
       }
 
-      body.print-schedule .teacher-print-notice {
+      body.print-report .teacher-print-notice {
         display: block !important;
         margin-top: 10px;
         border: 2px solid #1a1a2e;
@@ -3382,6 +3383,8 @@
       MAX_DAILY_TOTAL: 6,
       MAX_OCCUPANCY_PER_DAY: 6,
       EXCEPTIONAL_REVERSE_MAX_PERIOD: 5,
+      GLOBAL_SEARCH_TIME_MS: 1800,
+      GLOBAL_SEARCH_MAX_NODES: 8000,
       FAIRNESS_STORAGE_KEY: "sqs_fairness_v1"
     });
 
@@ -3469,6 +3472,8 @@
     let lastIntegrity = null;
     let chainSeq = 0;
     let engineOptions = { allowExceptionalReverse: true };
+    let globalSearchInfo = null;
+    let lastOperationType = "";
 
     // ============================================================
     // CONTROLLER (UI + Engine Bridge)
@@ -3477,30 +3482,22 @@
     function printOriginalSchedule() {
       const day = document.getElementById("daySelect").value;
       if (!day) { alert("اختر اليوم أولًا لطباعة جدوله"); return; }
+      const savedField = FIELD_SCHEDULE;
+      const savedVacancies = vacancies;
+      const savedMovements = movementLog;
+      const wrapper = document.getElementById("scheduleTableWrapper");
+      const report = document.getElementById("reportContainer");
+      const notice = document.getElementById("teacherPrintNotice");
+      const savedWrapper = wrapper.innerHTML;
+      const savedReport = report.innerHTML;
+      const savedNotice = notice.innerHTML;
+      const savedOutputDisplay = document.getElementById("output").style.display;
+      const dateDisplay = document.getElementById("dateDisplay");
+      const savedDateDisplay = dateDisplay.textContent;
 
-      const hasCompensationResult = currentDay === day && FIELD_SCHEDULE && FIELD_SCHEDULE[day] && vacancies.length > 0;
-      if (hasCompensationResult) {
-        const headerTitle = document.querySelector('.header h1');
-        const originalTitle = headerTitle.innerHTML;
-        headerTitle.innerHTML = 'جدول التعويض اليومي — إشعار المعلمين';
-        document.getElementById("teacherPrintNotice").innerHTML = buildTeacherPrintNotice(day);
-        document.body.classList.add("print-schedule");
-        setTimeout(function() {
-          window.print();
-          document.body.classList.remove("print-schedule");
-          headerTitle.innerHTML = originalTitle;
-        }, 200);
-        return;
-      }
-
-      if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
-      FIELD_SCHEDULE[day] = {};
+      FIELD_SCHEDULE = { [day]: {} };
       vacancies = [];
-      chains = [];
       movementLog = [];
-      buildTeacherState(day);
-      calculateOriginalEnd(day);
-      
       const origDay = ORIGINAL_SCHEDULE[day] || {};
       for (const cls of ALL_CLASSES) {
         FIELD_SCHEDULE[day][cls] = {};
@@ -3522,29 +3519,47 @@
         }
       }
       
-      const date = getSelectedDate() || "";
-      document.getElementById("dateDisplay").textContent = day + " — " + (date || "—");
-      
       const headerTitle = document.querySelector('.header h1');
       const originalTitle = headerTitle.innerHTML;
-      headerTitle.innerHTML = 'جدول الدروس اليومي';
-      
-      document.getElementById("attentionBanner").innerHTML = "";
-      document.getElementById("quickSummary").innerHTML = "";
+      headerTitle.innerHTML = 'جدول الدروس اليومي الأصلي';
+      dateDisplay.textContent = day + " — " + (getSelectedDate() || "—");
       renderScheduleTable(day);
-      document.getElementById("reportContainer").innerHTML = "";
-      document.getElementById("teacherPrintNotice").innerHTML = "";
+      report.innerHTML = "";
+      notice.innerHTML = "";
       document.getElementById("output").style.display = "block";
-      
+      document.body.classList.add("print-original");
+
       setTimeout(function() {
         window.print();
+        document.body.classList.remove("print-original");
         headerTitle.innerHTML = originalTitle;
+        FIELD_SCHEDULE = savedField;
+        vacancies = savedVacancies;
+        movementLog = savedMovements;
+        wrapper.innerHTML = savedWrapper;
+        report.innerHTML = savedReport;
+        notice.innerHTML = savedNotice;
+        dateDisplay.textContent = savedDateDisplay;
+        document.getElementById("output").style.display = savedOutputDisplay;
       }, 300);
     }
 
     function printFullReport() {
-      document.body.classList.remove("print-schedule");
-      window.print();
+      if (!lastOperationType || !currentDay || !FIELD_SCHEDULE || !FIELD_SCHEDULE[currentDay]) {
+        alert("طبّق التعويض أو الإشغال أولًا ثم اطبع التقرير");
+        return;
+      }
+      const headerTitle = document.querySelector('.header h1');
+      const originalTitle = headerTitle.innerHTML;
+      headerTitle.innerHTML = lastOperationType === "occupancy" ? "تقرير إشغال الحصص" : "تقرير تعويض الحصص";
+      document.getElementById("teacherPrintNotice").innerHTML = lastOperationType === "occupancy" ?
+        buildOccupancyPrintNotice(currentDay) : buildTeacherPrintNotice(currentDay);
+      document.body.classList.add("print-report");
+      setTimeout(function() {
+        window.print();
+        document.body.classList.remove("print-report");
+        headerTitle.innerHTML = originalTitle;
+      }, 200);
     }
 
     function movementExplanation(movement) {
@@ -3555,9 +3570,9 @@
       if (movement.movementType === "RIPPLE_SWAP")
         return "لدفع الفراغ الناتج عن التعويض نحو نهاية دوام الشعبة";
       if (movement.movementType === "EXCEPTIONAL_REVERSE")
-        return "جزء من تبادل استثنائي لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + "؛ ضمن الحد حتى الخامسة";
+        return "حركة عكسية ضمن المرحلة الثالثة لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + "؛ ضمن الحد حتى الخامسة";
       if (movement.movementType === "EXCEPTIONAL_CROSS_CLASS")
-        return "جزء من تبادل استثنائي آمن لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " في " + target;
+        return "جزء من تبادل آمن في المرحلة الثالثة لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " في " + target;
       return "ضمن سلسلة تعويض حصة غياب";
     }
 
@@ -3585,6 +3600,31 @@
       return '<h2>بيان الغياب والحركات — موجّه للمعلمين</h2>' +
         '<div style="margin-bottom:8px;line-height:1.7">' + affected + '</div>' +
         '<table><thead><tr><th>المعلم المتحرك</th><th>المادة</th><th>الشعبة</th><th>من</th><th>إلى</th><th>سبب الحركة</th></tr></thead>' +
+        '<tbody>' + rows + '</tbody></table>';
+    }
+
+    function buildOccupancyPrintNotice(day) {
+      const affected = absentList.map(teacher => {
+        const items = vacancies.filter(v => (v.originalTeacher || v.absentTeacher) === teacher)
+          .map(v => (v.class || v.className) + " (ح" + (v.period || v.targetPeriod) + ")");
+        return '<div><strong>المعلم الغائب: ' + esc(teacher) + '</strong> — الشعب المتأثرة: ' +
+          (items.length ? items.map(esc).join('، ') : 'لا توجد حصص متأثرة') + '</div>';
+      }).join("");
+      let rows = "";
+      for (const cls of ALL_CLASSES) {
+        for (let p = 1; p <= 7; p++) {
+          const cell = FIELD_SCHEDULE[day] && FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][p];
+          if (!cell || (cell.status !== LessonStatus.OCCUPANCY && cell.status !== LessonStatus.UNAVAILABLE)) continue;
+          const result = cell.status === LessonStatus.OCCUPANCY ? cell.teacher : "بلا معلم متاح";
+          const originalTeacher = cell.originalTeacher || cell.absentTeacher || "—";
+          rows += '<tr><td>' + esc(originalTeacher) + '</td><td>' + esc(cls) + '</td><td>الحصة ' + p +
+            '</td><td>' + esc(cell.subject || cell.absentSubject || "—") + '</td><td>' + esc(result) + '</td></tr>';
+        }
+      }
+      if (!rows) rows = '<tr><td colspan="5">لا توجد تكليفات إشغال في هذا التشغيل.</td></tr>';
+      return '<h2>بيان إشغال حصص الغياب — موجّه للمعلمين</h2>' +
+        '<div style="margin-bottom:8px;line-height:1.7">' + affected + '</div>' +
+        '<table><thead><tr><th>المعلم الغائب</th><th>الشعبة</th><th>الحصة</th><th>المادة</th><th>المعلم المكلّف</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>';
     }
 
@@ -3826,7 +3866,7 @@
       return entry;
     }
 
-    function findBestDirectPlan(cls, targetPeriod, originalEnd, day) {
+    function findDirectPlans(cls, targetPeriod, originalEnd, day) {
       const candidates = [];
       for (let P = originalEnd; P > targetPeriod; P--) {
         const slot = FIELD_SCHEDULE[day][cls][P];
@@ -3853,6 +3893,11 @@
         if (am !== bm) return am - bm;
         return b.fromPeriod - a.fromPeriod;
       });
+      return candidates;
+    }
+
+    function findBestDirectPlan(cls, targetPeriod, originalEnd, day) {
+      const candidates = findDirectPlans(cls, targetPeriod, originalEnd, day);
       return candidates.length ? candidates[0] : null;
     }
 
@@ -3959,11 +4004,11 @@
       }
     }
 
-    function tryCrossClassCascade(classA, targetPeriod, originalEndA, day, chain, filterProtected) {
+    function findCrossClassPlans(classA, targetPeriod, originalEndA, day) {
       const attempts = [];
+      const plans = [];
       if (!engineOptions.allowExceptionalReverse) {
-        chain.crossAttempts = [{ why: "الحركة العكسية مغلقة في التعويض العادي، ولا تُفتح إلا عند تشغيل الوضع الاستثنائي بعد ظهور التنبيه" }];
-        return null;
+        return { plans: [], attempts: [{ why: "المرحلة الثالثة غير مفعلة" }] };
       }
       for (let P = originalEndA; P > targetPeriod; P--) {
         const slot = FIELD_SCHEDULE[day][classA][P];
@@ -3977,7 +4022,7 @@
           continue;
         }
         const endB = originalEndMap[classB];
-        let plan = null;
+        let foundForCandidate = false;
         const exceptionalLimit = Math.min(endB, ENGINE_CONFIG.EXCEPTIONAL_REVERSE_MAX_PERIOD);
         for (let T2 = exceptionalLimit; T2 > targetPeriod; T2--) {
           const ySlot = FIELD_SCHEDULE[day][classB][T2];
@@ -3987,17 +4032,29 @@
           if (Y === X) continue;
           if (!isTeacherFree(Y, day, targetPeriod)) continue;
           if (!isTeacherFree(X, day, T2)) continue;
-          plan = { classA, classB, teacherX: X, teacherY: Y, targetPeriod, freePeriod: T2, candidateP: P };
-          break;
+          plans.push({ classA, classB, teacherX: X, teacherY: Y, targetPeriod, freePeriod: T2, candidateP: P });
+          foundForCandidate = true;
         }
-        if (plan) return plan;
-        attempts.push({
-          teacher: X, p: P, classB: classB,
-          why: "لا توجد حركة استثنائية صالحة داخل " + classB + " حتى الحصة " + exceptionalLimit
-        });
+        if (!foundForCandidate) {
+          attempts.push({
+            teacher: X, p: P, classB: classB,
+            why: "لا توجد حركة عكسية صالحة داخل " + classB + " حتى الحصة " + exceptionalLimit
+          });
+        }
       }
-      chain.crossAttempts = attempts;
-      return null;
+      plans.sort((a, b) => {
+        const ad = a.freePeriod - a.targetPeriod, bd = b.freePeriod - b.targetPeriod;
+        if (ad !== bd) return ad - bd;
+        if (a.candidateP !== b.candidateP) return b.candidateP - a.candidateP;
+        return ALL_CLASSES.indexOf(a.classB) - ALL_CLASSES.indexOf(b.classB);
+      });
+      return { plans, attempts };
+    }
+
+    function tryCrossClassCascade(classA, targetPeriod, originalEndA, day, chain) {
+      const result = findCrossClassPlans(classA, targetPeriod, originalEndA, day);
+      chain.crossAttempts = result.attempts;
+      return result.plans.length ? result.plans[0] : null;
     }
 
     function executeCrossClass(plan, day, chain) {
@@ -4077,7 +4134,7 @@
         targetPeriod: T, freePeriod: T2, candidateP: P,
         movements: [mv1.seq, mv2.seq, mv3.seq],
         exceptional: true,
-        result: "حل استثنائي: نقل حصة " + teacherX + " إلى الحصة " + T2 + " (ضمن الحد الخامس) ثم تغطية الهدف دون فقد أي حصة"
+        result: "حل المرحلة الثالثة: نقل حصة " + teacherX + " إلى الحصة " + T2 + " (ضمن الحد الخامس) ثم تغطية الهدف دون فقد أي حصة"
       };
       return true;
     }
@@ -4105,7 +4162,7 @@
         "لا مرشحين فوق الهدف";
       return "فشل Direct: لا توجد حصة لاحقة (من " + EndA + " إلى " + (T + 1) + ") متفرغ معلمها عند الحصة " + T + ". " +
         "فشل Ripple: لا توجد حركة أولى ممكنة (شرط المرشح الأول مطابق لشرط Direct). " +
-        "نتيجة الحل الاستثنائي العابر للشعب: " + cc + ". " +
+        "نتيجة المرحلة الثالثة العابرة للشعب: " + cc + ". " +
         "المرشحون المفحوصون: " + (cands.join("، ") || "لا يوجد");
     }
 
@@ -4143,7 +4200,7 @@
       if (chain.remainingGap) {
         chain.gapBlockedReason = documentGapBlockers(chain.className, finalGap, endA, day);
         if (chain.gapCrossFailedAt != null && chain.crossAttempts && chain.crossAttempts.length) {
-          chain.gapBlockedReason += " | ومحاولة الحل الاستثنائي عبر الشعب فشلت أيضًا: " +
+          chain.gapBlockedReason += " | ومحاولة المرحلة الثالثة عبر الشعب فشلت أيضًا: " +
             chain.crossAttempts.map(a => (a.teacher ? a.teacher + " (مرشح عند الحصة " + a.p + "): " : "") + a.why).join("؛ ");
         }
         chain.note = "حمي الهدف وبعّد الفراغ إلى الحصة " + finalGap +
@@ -4224,7 +4281,7 @@
       return gap;
     }
 
-    function processTargetVacancyCore(v, day) {
+    function createChainForVacancy(v) {
       const cls = v.className,
         T = v.period,
         EndA = v.originalEnd;
@@ -4240,8 +4297,26 @@
       chains.push(chain);
       v.chainId = chain.id;
       v.chain = chain;
+      return chain;
+    }
 
-      if (T === EndA) {
+    function listVacancyActions(v, day) {
+      const T = v.period, EndA = v.originalEnd;
+      if (T === EndA) return [{ kind: "NO_ACTION" }];
+      const actions = findDirectPlans(v.className, T, EndA, day).map(plan => ({ kind: "DIRECT", plan }));
+      const cross = findCrossClassPlans(v.className, T, EndA, day);
+      for (const plan of cross.plans) actions.push({ kind: "CROSS", plan, crossAttempts: cross.attempts });
+      actions.push({ kind: "FALLBACK", crossAttempts: cross.attempts });
+      return actions;
+    }
+
+    function applyVacancyAction(v, day, action) {
+      const cls = v.className,
+        T = v.period,
+        EndA = v.originalEnd;
+      const chain = createChainForVacancy(v);
+
+      if (action.kind === "NO_ACTION") {
         chain.method = "NO_ACTION";
         chain.status = "SUCCESS_NO_ACTION";
         chain.finalGap = T;
@@ -4249,49 +4324,65 @@
         chain.gapBlockedReason = null;
         chain.note = "الفراغ أصلاً في منطقة استقبال الفراغ (نهاية الدوام الأصلية) — لا حركة مطلوبة";
         v.status = chain.status;
-        return;
-      }
-
-      chain.lastStageReached = "DIRECT";
-      const best = findBestDirectPlan(cls, T, EndA, day);
-      if (best) {
+      } else if (action.kind === "DIRECT") {
+        const best = action.plan;
+        chain.lastStageReached = "DIRECT";
         executeMove(cls, best.fromPeriod, T, day, "DIRECT_TAIL_PULL",
-          "تغطية فراغ غياب " + v.absentTeacher + " في الحصة " + T +
-          " بأفضل سحب ممكن (بحث شامل قارن كل المرشحين ومحاكاة الداخلي الناتجة عن كل منهم)",
+          "تغطية فراغ غياب " + v.absentTeacher + " في الحصة " + T + " ضمن الخطة العالمية",
           chain.id);
         chain.lastStageReached = "RIPPLE";
         if (best.ripplePath.length) executeRipple(best.ripplePath, cls, day, chain.id);
         finalizeChain(chain, deriveChainMethod(chain), best.finalGap, EndA, day);
         v.status = chain.status;
-        return;
-      }
-
-      chain.lastStageReached = "RIPPLE";
-
-      chain.lastStageReached = "CROSS_CLASS";
-      const ccPlan = tryCrossClassCascade(cls, T, EndA, day, chain);
-      if (ccPlan && executeCrossClass(ccPlan, day, chain)) {
-        const gap = ccPlan.candidateP;
+      } else if (action.kind === "CROSS") {
+        chain.lastStageReached = "CROSS_CLASS";
+        chain.crossAttempts = action.crossAttempts || [];
+        if (!executeCrossClass(action.plan, day, chain)) throw new Error("تعذر تنفيذ بديل عالمي عابر للشعب");
+        const gap = action.plan.candidateP;
         chain.lastStageReached = "RIPPLE";
         const rp = findRipplePath(cls, gap, EndA, day);
         if (rp.path.length) executeRipple(rp.path, cls, day, chain.id);
         finalizeChain(chain, deriveChainMethod(chain), rp.finalGap, EndA, day);
         v.status = chain.status;
-        return;
+      } else {
+        chain.lastStageReached = "GLOBAL_SEARCH";
+        chain.crossAttempts = action.crossAttempts || [];
+        chain.method = "FALLBACK";
+        chain.status = "FALLBACK";
+        chain.finalGap = T;
+        chain.completion = "FAILED";
+        chain.gapBlockedReason = null;
+        chain.failureReason = buildFailureReason(cls, T, EndA, day, chain);
+        v.status = "FALLBACK";
       }
 
-      chain.method = "FALLBACK";
-      chain.status = "FALLBACK";
-      chain.finalGap = T;
-      chain.completion = "FAILED";
-      chain.gapBlockedReason = null;
-      chain.failureReason = buildFailureReason(cls, T, EndA, day, chain);
-      v.status = "FALLBACK";
+      verifyChainOutcome(chain, day);
+      if (chain.moves.length > 0) {
+        const cell = FIELD_SCHEDULE[day][chain.className] && FIELD_SCHEDULE[day][chain.className][chain.targetPeriod];
+        if (cell && isActiveLesson(cell)) cell.protectedTargetOf = chain.id;
+      }
+      return chain;
+    }
+
+    function processTargetVacancyCore(v, day) {
+      const actions = listVacancyActions(v, day);
+      const preferred = actions.find(a => a.kind === "NO_ACTION") ||
+        actions.find(a => a.kind === "DIRECT") ||
+        actions.find(a => a.kind === "CROSS") || actions[actions.length - 1];
+      return applyVacancyAction(v, day, preferred);
     }
 
     function processTargetVacancy(v, day) {
-      processTargetVacancyCore(v, day);
-      verifyChainOutcome(v.chain, day);
+      return processTargetVacancyCore(v, day);
+    }
+
+    function finalizePendingPartials(day) {
+      const partials = chains.filter(c => c.moves.length > 0 && c.completion === "PARTIAL");
+      for (const c of partials) {
+        const newGap = escalateGap(c, day, c.finalGap, c.originalEnd);
+        finalizeChain(c, deriveChainMethod(c), newGap, c.originalEnd, day);
+        verifyChainOutcome(c, day);
+      }
     }
 
     function processCompensation(day) {
@@ -4307,20 +4398,110 @@
       const order = vacancies.slice().sort(classOrder);
       for (const v of order) {
         processTargetVacancy(v, day);
-        const ch = v.chain;
-        if (ch && ch.moves.length > 0) {
-          const cell = FIELD_SCHEDULE[day][ch.className] && FIELD_SCHEDULE[day][ch.className][ch.targetPeriod];
-          if (cell && isActiveLesson(cell)) cell.protectedTargetOf = ch.id;
+      }
+      finalizePendingPartials(day);
+    }
+
+    function snapshotEngineState() {
+      return deepClone({ FIELD_SCHEDULE, movementLog, chains, vacancies, chainSeq });
+    }
+
+    function restoreEngineState(snapshot) {
+      FIELD_SCHEDULE = deepClone(snapshot.FIELD_SCHEDULE);
+      movementLog = deepClone(snapshot.movementLog);
+      chains = deepClone(snapshot.chains);
+      vacancies = deepClone(snapshot.vacancies);
+      chainSeq = snapshot.chainSeq;
+      for (const v of vacancies) {
+        v.chain = v.chainId ? chains.find(c => c.id === v.chainId) || null : null;
+      }
+    }
+
+    function globalStateScore() {
+      const compensated = chains.filter(c => c.status && c.status.indexOf("SUCCESS") === 0 && c.status !== "SUCCESS_NO_ACTION").length;
+      const complete = chains.filter(c => c.moves.length > 0 && c.completion === "COMPLETE").length;
+      const fallbacks = chains.filter(c => c.status === "FALLBACK").length;
+      const reverse = movementLog.filter(m => m.movementType === "EXCEPTIONAL_REVERSE").length;
+      const partial = chains.filter(c => c.completion === "PARTIAL").length;
+      const gapDistance = chains.reduce((sum, c) => sum + (Number(c.finalGap) || 0), 0);
+      return [compensated, complete, -fallbacks, -reverse, -partial, -movementLog.length, gapDistance];
+    }
+
+    function isBetterGlobalScore(a, b) {
+      if (!b) return true;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return a[i] > b[i];
+      }
+      return false;
+    }
+
+    function runGlobalCompensation(day) {
+      const searchStart = Date.now();
+      const initial = snapshotEngineState();
+
+      // نتيجة سريعة صالحة تكون نقطة أمان إذا انتهت مهلة البحث العالمي.
+      processCompensation(day);
+      let bestSnapshot = snapshotEngineState();
+      let bestScore = globalStateScore();
+      const baselineScore = bestScore.slice();
+      restoreEngineState(initial);
+
+      const deadline = searchStart + ENGINE_CONFIG.GLOBAL_SEARCH_TIME_MS;
+      let nodes = 0, limitHit = false, completePlans = 0;
+
+      function search(remaining) {
+        if (Date.now() >= deadline || nodes >= ENGINE_CONFIG.GLOBAL_SEARCH_MAX_NODES) {
+          limitHit = true;
+          return;
+        }
+        if (!remaining.length) {
+          completePlans++;
+          finalizePendingPartials(day);
+          const integrity = validateIntegrity(day);
+          if (integrity.allPassed) {
+            const score = globalStateScore();
+            if (isBetterGlobalScore(score, bestScore)) {
+              bestScore = score;
+              bestSnapshot = snapshotEngineState();
+            }
+          }
+          return;
+        }
+
+        const successes = chains.filter(c => c.status && c.status.indexOf("SUCCESS") === 0 && c.status !== "SUCCESS_NO_ACTION").length;
+        if (successes + remaining.length < bestScore[0]) return;
+
+        const choices = remaining.map(index => ({ index, actions: listVacancyActions(vacancies[index], day) }));
+        choices.sort((a, b) => a.actions.length - b.actions.length || a.index - b.index);
+        for (const choice of choices) {
+          const nextRemaining = remaining.filter(i => i !== choice.index);
+          for (const action of choice.actions) {
+            if (Date.now() >= deadline || nodes >= ENGINE_CONFIG.GLOBAL_SEARCH_MAX_NODES) {
+              limitHit = true;
+              return;
+            }
+            nodes++;
+            const before = snapshotEngineState();
+            try {
+              applyVacancyAction(vacancies[choice.index], day, action);
+              search(nextRemaining);
+            } catch (_) {
+              // البديل غير صالح في هذه الحالة العالمية؛ يُستبعد وتستمر بقية الفروع.
+            }
+            restoreEngineState(before);
+          }
         }
       }
-      const partials = chains.filter(function (c) {
-        return c.moves.length > 0 && c.completion === "PARTIAL";
-      }).sort(classOrder);
-      for (const c of partials) {
-        const newGap = escalateGap(c, day, c.finalGap, c.originalEnd);
-        finalizeChain(c, deriveChainMethod(c), newGap, c.originalEnd, day);
-        verifyChainOutcome(c, day);
-      }
+
+      search(vacancies.map((_, i) => i));
+      restoreEngineState(bestSnapshot);
+      globalSearchInfo = {
+        status: limitHit ? "BEST_WITHIN_LIMIT" : "OPTIMAL_MODELED",
+        nodes, completePlans,
+        durationMs: Date.now() - searchStart,
+        improved: isBetterGlobalScore(bestScore, baselineScore),
+        score: bestScore.slice()
+      };
     }
 
     // ============================================================
@@ -4331,6 +4512,8 @@
       if (!ORIGINAL_SCHEDULE[day]) throw new Error("يوم غير معروف: " + day);
       currentDay = day;
       currentDate = date || "";
+      lastOperationType = "compensation";
+      globalSearchInfo = null;
       absentList = Array.from(new Set(absentArray || []));
       // المراحل الثلاث تعمل آليًا؛ وتبقى الحركة العكسية مقيدة بالحد الخامس وفحوص السلامة.
       engineOptions = { allowExceptionalReverse: true };
@@ -4346,7 +4529,7 @@
       markAbsentTeachers(day);
       createAbsenceVacancies(day);
 
-      processCompensation(day);
+      runGlobalCompensation(day);
       lastIntegrity = validateIntegrity(day);
       if (!lastIntegrity.allPassed) {
         throw new Error("فشل فحص سلامة التعويض: " + lastIntegrity.issues.join(" | "));
@@ -4497,7 +4680,11 @@
 
       return {
         ok: true,
-        meta: { day: day, date: currentDate, runAt: new Date().toISOString(), duration: engineRunTime, automaticThreeStages: true },
+        meta: {
+          day: day, date: currentDate, runAt: new Date().toISOString(), duration: engineRunTime,
+          automaticThreeStages: true,
+          globalSearch: globalSearchInfo ? deepClone(globalSearchInfo) : null
+        },
         field: FIELD_SCHEDULE,
         classes: ALL_CLASSES.slice(),
         originalEnd: Object.assign({}, originalEndMap),
@@ -4567,7 +4754,7 @@
       const map = {
         "SUCCESS_DIRECT": '<span class="status-badge status-success">سحب مباشر ✓' + partialMark + "</span>",
         "SUCCESS_RIPPLE": '<span class="status-badge status-success">تبديل داخلي ✓' + partialMark + "</span>",
-        "SUCCESS_EXCEPTIONAL": '<span class="status-badge status-success">حل استثنائي ✓' + partialMark + "</span>",
+        "SUCCESS_EXCEPTIONAL": '<span class="status-badge status-success">المرحلة الثالثة ✓' + partialMark + "</span>",
         "SUCCESS_NO_ACTION": '<span class="status-badge status-noaction">فراغ محظوظ ✓</span>',
         "FALLBACK": '<span class="status-badge status-fallback">يحتاج قرار ✗</span>',
         "PENDING": '<span class="status-badge">قيد المعالجة</span>'
@@ -4591,7 +4778,9 @@
       const fbs = chains.filter(c => c.status === "FALLBACK");
       const noActions = chains.filter(c => c.status === "SUCCESS_NO_ACTION");
       const exceptionalMoves = movementLog.filter(m => m.movementType === "EXCEPTIONAL_REVERSE");
-      const modeLabel = "آلي كامل — المراحل الثلاث";
+      const searchInfo = res.meta && res.meta.globalSearch;
+      const modeLabel = searchInfo && searchInfo.status === "OPTIMAL_MODELED" ?
+        "بحث عالمي مكتمل — أفضل حل ضمن القيود" : "بحث عالمي — أفضل نتيجة ضمن المهلة";
       let html = "";
 
       html += '<div class="report-section"><h2>📋 نتيجة التعويض</h2><div class="report-item">' +
@@ -4601,10 +4790,20 @@
         '</strong> حصة غياب في نهاية دوام شعبتها، وبقيت <strong>' + fbs.length + '</strong> حالة تحتاج قرارًا.' +
         '</div></div>';
 
+      if (searchInfo) {
+        html += '<div class="report-section"><h2>🌐 حالة البحث العالمي</h2><div class="report-item">' +
+          (searchInfo.status === "OPTIMAL_MODELED" ?
+            'اكتمل فحص جميع البدائل الممثلة في النموذج، وهذه أفضل نتيجة وفق الأولويات.' :
+            'وصل البحث إلى حد الزمن؛ عُرضت أفضل نتيجة قانونية وجدها، دون ادعاء أنها مثلى.') +
+          '<br><span class="label">العُقد المفحوصة: ' + searchInfo.nodes + ' — الخطط الكاملة: ' + searchInfo.completePlans +
+          ' — الزمن: ' + searchInfo.durationMs + ' ms' + (searchInfo.improved ? ' — حسّن البحث النتيجة السريعة ✓' : '') +
+          '</span></div></div>';
+      }
+
       html += '<div class="report-section"><h2>🔄 الحركات المنفذة</h2>';
       if (!movementLog.length) html += '<div class="report-item">لم تُنفذ أي حركة.</div>';
       for (const m of movementLog) {
-        const exceptionalTag = m.movementType === "EXCEPTIONAL_REVERSE" ? ' <strong style="color:var(--warning)">(حركة عكسية استثنائية)</strong>' : '';
+        const exceptionalTag = m.movementType === "EXCEPTIONAL_REVERSE" ? ' <strong style="color:var(--warning)">(حركة عكسية — المرحلة الثالثة)</strong>' : '';
         html += '<div class="report-item"><strong>' + esc(m.sourceClass) + '</strong>: ' + esc(m.teacher) +
           ' — ' + esc(m.subject) + '، من الحصة ' + m.fromPeriod + ' إلى الحصة ' + m.toPeriod + exceptionalTag + '</div>';
       }
@@ -4650,7 +4849,7 @@
         '<div class="report-item">مدة الحساب: ' + esc(engineRunTime) + ' — فحص السلامة: ' +
         (integrity && integrity.allPassed ? 'ناجح ✓' : 'غير ناجح') + '<br>' +
         'السحب المباشر: ' + s.directMoves + '، الدفع الداخلي: ' + s.rippleMoves +
-        '، السلاسل الاستثنائية: ' + s.crossClassChains + '، الفراغات النهائية: ' + s.finalGaps + '.</div>';
+        '، سلاسل المرحلة الثالثة: ' + s.crossClassChains + '، الفراغات النهائية: ' + s.finalGaps + '.</div>';
       for (const f of fbs) {
         html += '<div class="report-item"><strong>' + esc(f.className) + ' ح' + f.targetPeriod + ':</strong> ' +
           esc(f.failureReason || "لم يوجد مسار قانوني ضمن القيود") + '</div>';
@@ -4894,6 +5093,10 @@
       });
       if (absent.length === 0) { alert("الرجاء تحديد معلم غائب واحد على الأقل غير مستثنى"); return; }
 
+      currentDay = day;
+      currentDate = getSelectedDate() || "";
+      lastOperationType = "occupancy";
+      globalSearchInfo = null;
       absentList = absent.slice();
 
       if (!FIELD_SCHEDULE) FIELD_SCHEDULE = {};
@@ -5052,6 +5255,7 @@
       }
 
       document.getElementById("quickSummary").innerHTML = "";
+      document.getElementById("dateDisplay").textContent = day + " — " + (currentDate || "—");
       renderScheduleTable(day);
       document.getElementById("reportContainer").innerHTML = "";
       document.getElementById("output").style.display = "block";
@@ -5103,6 +5307,23 @@
       document.getElementById("scheduleTableWrapper").innerHTML = "";
       document.getElementById("reportContainer").innerHTML = "";
       document.getElementById("teacherPrintNotice").innerHTML = "";
+      document.getElementById("dateDisplay").textContent = "";
+      document.body.classList.remove("print-original", "print-report");
+      FIELD_SCHEDULE = null;
+      absentList = [];
+      teacherState = {};
+      originalEndMap = {};
+      movementLog = [];
+      chains = [];
+      vacancies = [];
+      currentDay = "";
+      currentDate = "";
+      originalScheduleSnapshot = "";
+      engineRunTime = "";
+      lastIntegrity = null;
+      chainSeq = 0;
+      globalSearchInfo = null;
+      lastOperationType = "";
       const filterInput = document.getElementById("teacherFilter");
       if (filterInput) {
         filterInput.value = "";
