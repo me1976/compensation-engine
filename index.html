@@ -3431,7 +3431,6 @@
       TARGET_WEEKLY_LOAD: 24,
       MAX_DAILY_TOTAL: 6,
       MAX_OCCUPANCY_PER_DAY: 6,
-      EXCEPTIONAL_REVERSE_MAX_PERIOD: 5,
       GLOBAL_SEARCH_TIME_MS: 1800,
       GLOBAL_SEARCH_MAX_NODES: 8000,
       FAIRNESS_STORAGE_KEY: "sqs_fairness_v1"
@@ -3619,9 +3618,9 @@
       if (movement.movementType === "RIPPLE_SWAP")
         return "لدفع الفراغ الناتج عن التعويض نحو نهاية دوام الشعبة";
       if (movement.movementType === "EXCEPTIONAL_REVERSE")
-        return "حركة عكسية ضمن المرحلة الثالثة لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + "؛ ضمن الحد حتى الخامسة";
+        return "حركة عكسية ضمن تبادل دائري آمن لتغطية الغياب أو إغلاق فراغ الضغط؛ داخل نهاية دوام الشعبة";
       if (movement.movementType === "EXCEPTIONAL_CROSS_CLASS")
-        return "جزء من تبادل آمن في المرحلة الثالثة لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " في " + target;
+        return "جزء من تبادل دائري آمن لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " أو دفع الفراغ إلى نهاية الدوام في " + target;
       return "ضمن سلسلة تعويض حصة غياب";
     }
 
@@ -4118,22 +4117,23 @@
         }
         const endB = originalEndMap[classB];
         let foundForCandidate = false;
-        const exceptionalLimit = Math.min(endB, ENGINE_CONFIG.EXCEPTIONAL_REVERSE_MAX_PERIOD);
-        for (let T2 = exceptionalLimit; T2 > targetPeriod; T2--) {
+        for (let T2 = endB; T2 > targetPeriod; T2--) {
           const ySlot = FIELD_SCHEDULE[day][classB][T2];
           if (!isActiveLesson(ySlot)) continue;
           if (ySlot.protectedTargetOf) continue;
           const Y = ySlot.teacher;
           if (Y === X) continue;
           if (!isTeacherFree(Y, day, targetPeriod)) continue;
-          if (!isTeacherFree(X, day, T2)) continue;
+          const xClassAtT2 = findClassOfTeacherAt(X, day, T2);
+          const candidateMoveFreesXAtT2 = T2 === P && xClassAtT2 === classA;
+          if (!isTeacherFree(X, day, T2) && !candidateMoveFreesXAtT2) continue;
           plans.push({ classA, classB, teacherX: X, teacherY: Y, targetPeriod, freePeriod: T2, candidateP: P });
           foundForCandidate = true;
         }
         if (!foundForCandidate) {
           attempts.push({
             teacher: X, p: P, classB: classB,
-            why: "لا توجد حركة عكسية صالحة داخل " + classB + " حتى الحصة " + exceptionalLimit
+            why: "لا يوجد تبادل دائري صالح داخل " + classB + " حتى نهاية دوامها في الحصة " + endB
           });
         }
       }
@@ -4164,19 +4164,21 @@
       const endB = originalEndMap[classB];
       const endA = originalEndMap[classA];
       if (!engineOptions.allowExceptionalReverse) return false;
-      if (T2 > endB || T2 <= T || T2 > ENGINE_CONFIG.EXCEPTIONAL_REVERSE_MAX_PERIOD) return false;
+      if (T2 > endB || T2 <= T) return false;
       if (P > endA || P <= T) return false;
       const aT = FIELD_SCHEDULE[day][classA][T];
       const bT = FIELD_SCHEDULE[day][classB][T];
       const bT2 = FIELD_SCHEDULE[day][classB][T2];
       const aP = FIELD_SCHEDULE[day][classA][P];
+      const xClassAtT2 = findClassOfTeacherAt(teacherX, day, T2);
+      const candidateMoveFreesXAtT2 = T2 === P && xClassAtT2 === classA;
       const preOK = !!(aT && isGapStatus(aT.status)) &&
         !!(bT && isActiveLesson(bT) && !bT.protectedTargetOf && bT.teacher === teacherX && !isAbsent(teacherX)) &&
         !!(bT2 && isActiveLesson(bT2) && !bT2.protectedTargetOf && bT2.teacher === teacherY && teacherY !== teacherX && !isAbsent(teacherY)) &&
         !!(aP && isActiveLesson(aP) && !aP.protectedTargetOf && aP.teacher === teacherX) &&
         classB !== classA &&
         isTeacherFree(teacherY, day, T) &&
-        isTeacherFree(teacherX, day, T2);
+        (isTeacherFree(teacherX, day, T2) || candidateMoveFreesXAtT2);
       if (!preOK) return false;
 
       const snap = { aT: deepClone(aT), bT: deepClone(bT), bT2: deepClone(bT2), aP: deepClone(aP) };
@@ -4229,7 +4231,8 @@
         targetPeriod: T, freePeriod: T2, candidateP: P,
         movements: [mv1.seq, mv2.seq, mv3.seq],
         exceptional: true,
-        result: "حل المرحلة الثالثة: نقل حصة " + teacherX + " إلى الحصة " + T2 + " (ضمن الحد الخامس) ثم تغطية الهدف دون فقد أي حصة"
+        result: "حل المرحلة الثالثة: تبادل دائري حرر " + teacherX + " عند الحصة " + T +
+          "، ونقل حصته إلى الحصة " + T2 + " داخل نهاية دوام الشعبة، ثم دفع الفراغ دون فقد أي حصة"
       };
       return true;
     }
@@ -4358,20 +4361,38 @@
 
     function escalateGap(chain, day, gapStart, endA) {
       let gap = gapStart;
-      const visited = new Set([gapStart]);
+      const visited = new Set([chain.className + "|" + gapStart]);
       let guard = 0;
       while (gap < endA && guard++ < 14) {
         const plan = findRipplePath(chain.className, gap, endA, day, true);
         if (plan.path.length) {
           executeRipple(plan.path, chain.className, day, chain.id);
-          if (visited.has(plan.finalGap)) break;
-          visited.add(plan.finalGap);
+          const rippleKey = chain.className + "|" + plan.finalGap;
+          if (visited.has(rippleKey)) break;
+          visited.add(rippleKey);
           gap = plan.finalGap;
         }
         if (gap >= endA) break;
-        // الاستثناء لا يُصرف لتحسين موضع فجوة سلسلة نجحت أصلًا؛
-        // يُتاح فقط لتغطية هدف غياب عجز التعويض العادي عن حله.
-        break;
+
+        const cross = findCrossClassPlans(chain.className, gap, endA, day);
+        chain.crossAttempts = cross.attempts;
+        let executedPlan = null;
+        for (const candidate of cross.plans) {
+          if (executeCrossClass(candidate, day, chain)) {
+            executedPlan = candidate;
+            break;
+          }
+        }
+        if (!executedPlan) {
+          chain.gapCrossFailedAt = gap;
+          break;
+        }
+
+        const nextGap = executedPlan.candidateP;
+        const crossKey = chain.className + "|" + nextGap;
+        if (visited.has(crossKey)) break;
+        visited.add(crossKey);
+        gap = nextGap;
       }
       return gap;
     }
@@ -4610,7 +4631,7 @@
       lastOperationType = "compensation";
       globalSearchInfo = null;
       absentList = Array.from(new Set(absentArray || []));
-      // المراحل الثلاث تعمل آليًا؛ وتبقى الحركة العكسية مقيدة بالحد الخامس وفحوص السلامة.
+      // المراحل الثلاث تعمل آليًا؛ والحركة العكسية لا تُنفذ إلا داخل تبادل دائري مغلق وفحوص السلامة.
       engineOptions = { allowExceptionalReverse: true };
       originalScheduleSnapshot = JSON.stringify(ORIGINAL_SCHEDULE);
       movementLog = [];
@@ -4835,7 +4856,10 @@
         if (m.fromPeriod < m.toPeriod) {
           if (m.movementType !== "EXCEPTIONAL_REVERSE") issues.push("حركة عكسية غير مصنفة كاستثناء: " + m.teacher);
           if (!engineOptions.allowExceptionalReverse) issues.push("حركة عكسية نُفذت في الوضع العادي: " + m.teacher);
-          if (m.toPeriod > ENGINE_CONFIG.EXCEPTIONAL_REVERSE_MAX_PERIOD) issues.push("حركة عكسية تجاوزت الحصة الخامسة: " + m.teacher);
+          const classEnd = originalEndMap[m.targetClass];
+          if (!classEnd || m.toPeriod > classEnd) {
+            issues.push("حركة عكسية تجاوزت نهاية دوام " + m.targetClass + ": " + m.teacher + " إلى الحصة " + m.toPeriod);
+          }
         }
       }
       return { allPassed: issues.length === 0, issues: issues };
@@ -4903,8 +4927,8 @@
 
       if (exceptionalMoves.length) {
         html += '<div class="report-section"><h2>⚠️ المرحلة الثالثة</h2><div class="report-item" style="border-right:3px solid var(--warning)">' +
-          'استُخدمت ' + exceptionalMoves.length + ' حركة عكسية، ولم تتجاوز أي منها الحصة ' + ENGINE_CONFIG.EXCEPTIONAL_REVERSE_MAX_PERIOD +
-          '. طبّقها النظام آليًا بعد تعذر الحل في المرحلتين الأولى والثانية.</div></div>';
+          'استُخدمت ' + exceptionalMoves.length + ' حركة عكسية داخل تبادل دائري مغلق، ولم تتجاوز أي حركة نهاية دوام شعبتها. ' +
+          'طبّقها النظام آليًا بعد تعذر السحب والدفع الداخليين، مع فحص عدم فقد الحصص أو تعارض المعلمين.</div></div>';
       }
 
       if (noActions.length) {
