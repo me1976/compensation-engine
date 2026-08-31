@@ -951,7 +951,7 @@
           <div class="legend-dot" style="background:var(--shift-empty)"></div> فراغ نهاية الدوام
         </div>
         <div class="legend-item">
-          <div class="legend-dot" style="background:var(--cross)"></div> عابر للشعب
+          <div class="legend-dot" style="background:var(--cross)"></div> 🔁 تدوير بين الشعب
         </div>
         <div class="legend-item">
           <div class="legend-dot" style="background:var(--fallback)"></div> استعصاء تعويض/ضغط/إشغال
@@ -3614,13 +3614,13 @@
       const chain = chains.find(c => c.id === movement.chainId);
       const target = chain ? (chain.className + " ح" + chain.targetPeriod) : movement.targetClass;
       if (movement.movementType === "DIRECT_TAIL_PULL")
-        return "لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " في " + target;
+        return "تغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " — " + target;
       if (movement.movementType === "RIPPLE_SWAP")
-        return "لدفع الفراغ الناتج عن التعويض نحو نهاية دوام الشعبة";
-      if (movement.movementType === "EXCEPTIONAL_REVERSE")
-        return "حركة عكسية ضمن تبادل دائري آمن لتغطية الغياب أو إغلاق فراغ الضغط؛ داخل نهاية دوام الشعبة";
-      if (movement.movementType === "EXCEPTIONAL_CROSS_CLASS")
-        return "جزء من تبادل دائري آمن لتغطية غياب " + (chain ? chain.absentTeacher : "المعلم الغائب") + " أو دفع الفراغ إلى نهاية الدوام في " + target;
+        return "دفع الفراغ لنهاية الدوام";
+      if (movement.movementType === "EXCEPTIONAL_REVERSE" || movement.movementType === "EXCEPTIONAL_CROSS_CLASS") {
+        return movement.cyclePurpose === "PRESSURE_GAP" ?
+          "🔁 تدوير لإغلاق فراغ الضغط" : "🔁 تدوير لتغطية الغياب";
+      }
       return "ضمن سلسلة تعويض حصة غياب";
     }
 
@@ -4225,11 +4225,18 @@
         "EXCEPTIONAL_CROSS_CLASS",
         "تعويض عبر الشعب: نقل حصة " + teacherX + " من " + P + " إلى الهدف " + T + " في " + classA + " بعد تحريره من " + classB,
         chain.id);
+      const cyclePurpose = plan.purpose === "PRESSURE_GAP" ? "PRESSURE_GAP" : "ABSENCE_TARGET";
+      for (const movement of [mv1, mv2, mv3]) {
+        movement.cyclePurpose = cyclePurpose;
+        movement.cycleTargetClass = classA;
+        movement.cycleTargetPeriod = T;
+      }
       FIELD_SCHEDULE[day][classA][P].createdByMovementSeq = mv3.seq;
       if (!chain.crossInfo) chain.crossInfo = {
         classA: classA, classB: classB, teacherX: teacherX, teacherY: teacherY,
         targetPeriod: T, freePeriod: T2, candidateP: P,
         movements: [mv1.seq, mv2.seq, mv3.seq],
+        purpose: cyclePurpose,
         exceptional: true,
         result: "حل المرحلة الثالثة: تبادل دائري حرر " + teacherX + " عند الحصة " + T +
           "، ونقل حصته إلى الحصة " + T2 + " داخل نهاية دوام الشعبة، ثم دفع الفراغ دون فقد أي حصة"
@@ -4378,6 +4385,7 @@
         chain.crossAttempts = cross.attempts;
         let executedPlan = null;
         for (const candidate of cross.plans) {
+          candidate.purpose = "PRESSURE_GAP";
           if (executeCrossClass(candidate, day, chain)) {
             executedPlan = candidate;
             break;
@@ -4919,7 +4927,7 @@
       html += '<div class="report-section"><h2>🔄 الحركات المنفذة</h2>';
       if (!movementLog.length) html += '<div class="report-item">لم تُنفذ أي حركة.</div>';
       for (const m of movementLog) {
-        const exceptionalTag = m.movementType === "EXCEPTIONAL_REVERSE" ? ' <strong style="color:var(--warning)">(حركة عكسية — المرحلة الثالثة)</strong>' : '';
+        const exceptionalTag = m.movementType === "EXCEPTIONAL_REVERSE" ? ' <strong style="color:var(--warning)">(🔁 تدوير دائري — المرحلة الثالثة)</strong>' : '';
         html += '<div class="report-item"><strong>' + esc(m.sourceClass) + '</strong>: ' + esc(m.teacher) +
           ' — ' + esc(m.subject) + '، من الحصة ' + m.fromPeriod + ' إلى الحصة ' + m.toPeriod + exceptionalTag + '</div>';
       }
@@ -5531,7 +5539,7 @@
               m.targetClass === cls && m.toPeriod === p);
             const isRipple = movementLog.some(m => m.movementType === "RIPPLE_SWAP" && m.targetClass === cls && m.toPeriod === p);
             cellClass = (isCross ? "cell-cross" : "cell-shifted") + (isFallbackTarget ? " cell-fallback" : "");
-            const badge = isCross ? '<span class="move-badge cross">عابر</span>'
+            const badge = isCross ? '<span class="move-badge cross">🔁 تدوير</span>'
               : isRipple ? '<span class="move-badge ripple">داخلي</span>'
                 : '<span class="move-badge direct">مباشر</span>';
             content = '<div class="cell-info"><span class="subject-name">' + esc(lesson.subject) +
