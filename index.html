@@ -3427,7 +3427,7 @@
 
     const ENGINE_CONFIG = Object.freeze({
       EXCLUDED_TEACHERS: ["عمار"],
-      OCCUPANCY_EXEMPT_TEACHERS: [],
+      OCCUPANCY_EXEMPT_TEACHERS: ["ايمن", "أيمن"],
       TARGET_WEEKLY_LOAD: 24,
       MAX_DAILY_TOTAL: 6,
       MAX_OCCUPANCY_PER_DAY: 6,
@@ -3709,7 +3709,8 @@
         for (let p = 1; p <= 7; p++) {
           const cell = FIELD_SCHEDULE[day] && FIELD_SCHEDULE[day][cls] && FIELD_SCHEDULE[day][cls][p];
           if (!cell || (cell.status !== LessonStatus.OCCUPANCY && cell.status !== LessonStatus.UNAVAILABLE)) continue;
-          const result = cell.status === LessonStatus.OCCUPANCY ? "إشغال ناجح — " + cell.teacher : "استعصاء إشغال — بلا معلم متاح";
+          const result = cell.status === LessonStatus.OCCUPANCY ? "إشغال ناجح — " + cell.teacher +
+            (cell.repeatedDuty ? " (تكرار اضطراري لتحقيق التغطية)" : "") : "استعصاء إشغال — بلا معلم متاح";
           const originalTeacher = cell.originalTeacher || cell.absentTeacher || "—";
           rows += '<tr><td>' + esc(originalTeacher) + '</td><td>' + esc(cls) + '</td><td>الحصة ' + p +
             '</td><td>' + esc(cell.subject || cell.absentSubject || "—") + '</td><td>' + esc(result) + '</td></tr>';
@@ -5228,6 +5229,7 @@
         if (count > ENGINE_CONFIG.MAX_DAILY_TOTAL) issues.push("تجاوز النصاب اليومي للمعلم " + teacher + ": " + count);
       }
       for (const [teacher, count] of Object.entries(occupancyLoad)) {
+        if (isExemptFromOccupancy(teacher)) issues.push("تم إشغال معلم مستثنى: " + teacher);
         if (count > ENGINE_CONFIG.MAX_OCCUPANCY_PER_DAY) issues.push("تجاوز حد الإشغال للمعلم " + teacher + ": " + count);
         const baseLoad = weeklyLoads[teacher] || 0;
         const effectiveWeeklyLoad = baseLoad + (priorWeeklyOccupancy[teacher] || 0) + count;
@@ -5241,6 +5243,75 @@
         }
       }
       return { allPassed: issues.length === 0, issues: issues };
+    }
+
+    // Minimum-cost maximum flow: coverage first, then avoid repeated daily duty.
+    // Reverse edges let the planner revise earlier assignments across the whole day.
+    function planOccupancyAssignments(vacancyList, candidates, busy, dailyLoads, weeklyLoads, priorLoads) {
+      const graph = [];
+      const node = () => { graph.push([]); return graph.length - 1; };
+      const edge = (from, to, capacity, cost) => {
+        const forward = { to, capacity, cost, reverse: graph[to].length };
+        graph[from].push(forward);
+        graph[to].push({ to: from, capacity: 0, cost: -cost, reverse: graph[from].length - 1 });
+        return forward;
+      };
+      const source = node(), sink = node();
+      const vacancyNodes = vacancyList.map(() => node());
+      const choices = vacancyList.map(() => []);
+      vacancyNodes.forEach(id => edge(source, id, 1, 0));
+      const ordered = candidates.slice().sort((a, b) => a.localeCompare(b, "ar"));
+      const scale = ordered.length + 1;
+      const repeatCost = (vacancyList.length + 1) * (26 * scale + 1);
+      ordered.forEach((teacher, rank) => {
+        const remaining = Math.max(0, ENGINE_CONFIG.TARGET_WEEKLY_LOAD -
+          (weeklyLoads[teacher] || 0) - (priorLoads[teacher] || 0));
+        const capacity = Math.min(remaining, ENGINE_CONFIG.MAX_OCCUPANCY_PER_DAY,
+          Math.max(0, ENGINE_CONFIG.MAX_DAILY_TOTAL - (dailyLoads[teacher] || 0)));
+        if (!capacity) return;
+        const teacherNode = node();
+        for (let count = 0; count < capacity; count++) {
+          edge(teacherNode, sink, 1, (count ? repeatCost : 0) +
+            (24 - remaining + count) * scale + rank);
+        }
+        for (let period = 1; period <= 7; period++) {
+          if (busy[period] && busy[period][teacher]) continue;
+          const slotNode = node();
+          edge(slotNode, teacherNode, 1, 0);
+          vacancyList.forEach((vacancy, index) => {
+            if (vacancy.period === period) choices[index].push({ teacher,
+              edge: edge(vacancyNodes[index], slotNode, 1, 0) });
+          });
+        }
+      });
+      while (true) {
+        const distances = graph.map(() => Infinity), previous = graph.map(() => null);
+        const queued = graph.map(() => false), queue = [source];
+        distances[source] = 0;
+        queued[source] = true;
+        for (let head = 0; head < queue.length; head++) {
+          const from = queue[head];
+          queued[from] = false;
+          graph[from].forEach((arc, index) => {
+            if (arc.capacity > 0 && distances[arc.to] > distances[from] + arc.cost) {
+              distances[arc.to] = distances[from] + arc.cost;
+              previous[arc.to] = { from, index };
+              if (!queued[arc.to]) { queue.push(arc.to); queued[arc.to] = true; }
+            }
+          });
+        }
+        if (!previous[sink]) break;
+        for (let current = sink; current !== source;) {
+          const step = previous[current], arc = graph[step.from][step.index];
+          arc.capacity--;
+          graph[current][arc.reverse].capacity++;
+          current = step.from;
+        }
+      }
+      return choices.map(options => {
+        const selected = options.find(option => option.edge.capacity === 0);
+        return selected ? selected.teacher : null;
+      });
     }
 
     function runOccupancy() {
@@ -5344,36 +5415,15 @@
       const assignedToday = [];
 
       vacancies.sort((a, b) => a.period - b.period);
+      const assignments = planOccupancyAssignments(vacancies,
+        ALL_TEACHERS.filter(t => !isExemptFromOccupancy(t) && !absent.includes(t)),
+        buildBusyMatrix(FIELD_SCHEDULE[day], ALL_CLASSES), dailyTotal, weeklyLoads, priorWeeklyOccupancy);
 
-      for (const vac of vacancies) {
+      for (const [vacancyIndex, vac] of vacancies.entries()) {
         const p = vac.period;
         const cls = vac.class;
 
-        const busy = buildBusyMatrix(FIELD_SCHEDULE[day], ALL_CLASSES);
-
-        let bestSub = null;
-        let bestScore = -Infinity;
-
-        for (const t of ALL_TEACHERS) {
-          if (isExemptFromOccupancy(t)) continue;
-          if (absent.includes(t)) continue;
-          if (busy[p][t]) continue;
-          
-          if ((dailyTotal[t] || 0) >= ENGINE_CONFIG.MAX_DAILY_TOTAL) continue;
-          if ((todayOccupancy[t] || 0) >= ENGINE_CONFIG.MAX_OCCUPANCY_PER_DAY) continue;
-
-          const effectiveWeeklyLoad = (weeklyLoads[t] || 0) + (priorWeeklyOccupancy[t] || 0) + (todayOccupancy[t] || 0);
-          const remainingToTarget = ENGINE_CONFIG.TARGET_WEEKLY_LOAD - effectiveWeeklyLoad;
-          if (remainingToTarget <= 0) continue;
-
-          // العدالة أساسها أكبر فرق متبقٍ للوصول إلى النصاب 24، ثم الأقل إشغالًا اليوم.
-          const score = (remainingToTarget * 1000) - ((todayOccupancy[t] || 0) * 100) - (dailyTotal[t] || 0);
-          
-          if (score > bestScore) {
-            bestScore = score;
-            bestSub = t;
-          }
-        }
+        const bestSub = assignments[vacancyIndex];
 
         if (bestSub) {
           todayOccupancy[bestSub] = (todayOccupancy[bestSub] || 0) + 1;
@@ -5386,6 +5436,7 @@
             originalPeriod: p, currentPeriod: p,
             status: LessonStatus.OCCUPANCY,
             originalTeacher: vac.originalTeacher,
+            repeatedDuty: todayOccupancy[bestSub] > 1,
             lessonId: "occupancy|" + day + "|" + cls + "|" + p + "|" + bestSub
           };
         } else {
@@ -5420,7 +5471,7 @@
       } else {
         banner.innerHTML =
           '<div class="attention-banner" style="background:rgba(52,211,153,.12);border-color:rgba(52,211,153,.45);color:var(--success)">✅ تم إشغال ' +
-          occupancyCount + ' حصة بتوزيع عادل بنجاح.</div>';
+          occupancyCount + ' حصة بأقل تكرار يومي ممكن ضمن القيود.</div>';
       }
 
       document.getElementById("quickSummary").innerHTML = "";
