@@ -961,6 +961,20 @@
       <div class="schedule-section">
         <h2>📋 الجدول الميداني</h2>
         <div class="table-wrapper" id="scheduleTableWrapper"></div>
+        <div id="manualEditTools" class="no-print" hidden>
+          <p>✎ اضغط على أي مربع لتعديله أو تبديل حصته بمربع آخر قبل الطباعة. التعديلات تخص نتيجة هذا التشغيل فقط.</p>
+          <button type="button" class="btn" onclick="undoManualEdit()">↶ تراجع عن آخر تعديل</button>
+        </div>
+        <dialog id="lessonEditor" class="no-print" style="max-width:460px;width:90%;border-radius:12px;padding:20px" dir="rtl">
+          <h3 id="lessonEditorTitle">تعديل الحصة</h3>
+          <p><label>المعلم <select id="manualTeacher"></select></label></p>
+          <p><label>المادة <input id="manualSubject" maxlength="80"></label></p>
+          <p><label>أو تبديل الحصة مع <select id="manualSwap"><option value="">بدون تبديل</option></select></label></p>
+          <p>لإفراغ المربع اختر «فراغ» وامسح المادة. التبديل يحافظ على الحصتين.</p>
+          <p id="manualEditError" role="alert" style="color:#b91c1c"></p>
+          <button type="button" onclick="saveManualEdit()">حفظ التعديل</button>
+          <button type="button" onclick="document.getElementById('lessonEditor').close()">إلغاء</button>
+        </dialog>
         <div class="teacher-print-notice" id="teacherPrintNotice"></div>
       </div>
 
@@ -3522,6 +3536,107 @@
     let engineOptions = { allowExceptionalReverse: true };
     let globalSearchInfo = null;
     let lastOperationType = "";
+    let manualEdits = [];
+    let manualEditHistory = [];
+    let editingLesson = null;
+
+    function openLessonEditor(classIndex, period) {
+      if (lastOperationType !== "compensation") return;
+      const cls = ALL_CLASSES[classIndex];
+      const cell = FIELD_SCHEDULE[currentDay][cls][period];
+      editingLesson = { cls, period };
+      document.getElementById("lessonEditorTitle").textContent = cls + " — الحصة " + period;
+      document.getElementById("manualTeacher").innerHTML = '<option value="">فراغ</option>' +
+        ALL_TEACHERS.filter(t => !isAbsent(t)).map(t => '<option value="' + esc(t) + '">' + esc(t) + '</option>').join("");
+      document.getElementById("manualTeacher").value = isActiveLesson(cell) ? cell.teacher : "";
+      document.getElementById("manualSubject").value = isActiveLesson(cell) ? cell.subject : "";
+      let options = '<option value="">بدون تبديل</option>';
+      for (let p = 1; p <= 7; p++) {
+        if (p === period) continue;
+        const other = FIELD_SCHEDULE[currentDay][cls][p];
+        options += '<option value="' + p + '">الحصة ' + p + ' — ' + esc(isActiveLesson(other) ? other.teacher + ' / ' + other.subject : 'فراغ') + '</option>';
+      }
+      document.getElementById("manualSwap").innerHTML = options;
+      document.getElementById("manualEditError").textContent = "";
+      document.getElementById("lessonEditor").showModal();
+    }
+
+    function applyManualLessonEdit(cls, period, teacher, subject, swapPeriod) {
+      if (lastOperationType !== "compensation" || !FIELD_SCHEDULE[currentDay]?.[cls] || !Number.isInteger(period) || period < 1 || period > 7)
+        throw new Error("لا توجد نتيجة تعويض صالحة للتعديل");
+      const before = deepClone(FIELD_SCHEDULE[currentDay]);
+      const next = deepClone(before);
+      const changed = [period];
+      if (swapPeriod) {
+        if (!Number.isInteger(swapPeriod) || swapPeriod < 1 || swapPeriod > 7 || swapPeriod === period) throw new Error("اختر حصة أخرى للتبديل");
+        [next[cls][period], next[cls][swapPeriod]] = [next[cls][swapPeriod], next[cls][period]];
+        changed.push(swapPeriod);
+      } else {
+        teacher = String(teacher || "").trim();
+        subject = String(subject || "").trim();
+        if (!!teacher !== !!subject) throw new Error("أدخل المعلم والمادة معًا، أو اتركهما فارغين");
+        if (teacher && (!ALL_TEACHERS.includes(teacher) || isAbsent(teacher))) throw new Error("المعلم غير متاح أو غائب");
+        if (subject.length > 80) throw new Error("اسم المادة طويل جدًا");
+        next[cls][period] = { teacher, subject, status: teacher ? LessonStatus.NORMAL : LessonStatus.EMPTY,
+          originalPeriod: period, currentPeriod: period,
+          lessonId: teacher ? 'manual|' + currentDay + '|' + cls + '|' + period + '|' + manualEdits.length : null };
+      }
+      for (const p of changed) {
+        const cell = next[cls][p];
+        if (isActiveLesson(cell) && p > originalEndMap[cls]) throw new Error("التعديل يتجاوز نهاية دوام الشعبة");
+        cell.currentPeriod = p;
+        cell.manualEdited = true;
+      }
+      for (let p = 1; p <= 7; p++) {
+        const busy = new Set();
+        for (const row of Object.values(next)) {
+          const cell = row[p];
+          if (!isActiveLesson(cell)) continue;
+          if (isAbsent(cell.teacher)) throw new Error("لا يمكن تكليف معلم غائب");
+          if (busy.has(cell.teacher)) throw new Error("تعارض: " + cell.teacher + " مشغول في الحصة " + p);
+          busy.add(cell.teacher);
+        }
+      }
+      manualEditHistory.push({ field: before, edits: deepClone(manualEdits) });
+      FIELD_SCHEDULE[currentDay] = next;
+      for (const p of changed) {
+        const describe = cell => isActiveLesson(cell) ? cell.teacher + " / " + cell.subject : "فراغ";
+        manualEdits.push({ cls, period: p, before: describe(before[cls][p]), after: describe(next[cls][p]) });
+      }
+    }
+
+    function manualEditsReport() {
+      return '<h3>✎ تعديلات يدوية معتمدة بعد التعويض</h3><p>الجدول المعروض هو النسخة المعدلة؛ نتائج البحث الآلي السابقة لا تصف التعديلات اليدوية.</p>' +
+        '<table><thead><tr><th>الشعبة</th><th>الحصة</th><th>قبل</th><th>بعد</th></tr></thead><tbody>' +
+        manualEdits.map(e => '<tr><td>' + esc(e.cls) + '</td><td>' + e.period + '</td><td>' + esc(e.before) + '</td><td>' + esc(e.after) + '</td></tr>').join("") + '</tbody></table>';
+    }
+
+    function refreshManualResult() {
+      renderScheduleTable(currentDay);
+      document.getElementById("quickSummary").innerHTML = "";
+      document.getElementById("attentionBanner").innerHTML = "";
+      document.getElementById("reportContainer").innerHTML = manualEdits.length ? manualEditsReport() :
+        generateReport(currentDay, lastIntegrity, buildResults());
+      document.getElementById("teacherPrintNotice").innerHTML = "";
+    }
+
+    function saveManualEdit() {
+      try {
+        applyManualLessonEdit(editingLesson.cls, editingLesson.period,
+          document.getElementById("manualTeacher").value, document.getElementById("manualSubject").value,
+          Number(document.getElementById("manualSwap").value));
+        document.getElementById("lessonEditor").close();
+        refreshManualResult();
+      } catch (error) { document.getElementById("manualEditError").textContent = error.message; }
+    }
+
+    function undoManualEdit() {
+      const previous = manualEditHistory.pop();
+      if (!previous || lastOperationType !== "compensation") return;
+      FIELD_SCHEDULE[currentDay] = previous.field;
+      manualEdits = previous.edits;
+      refreshManualResult();
+    }
 
     // ============================================================
     // CONTROLLER (UI + Engine Bridge)
@@ -3690,11 +3805,12 @@
       }
       if (!rows) rows = '<tr><td colspan="6">لم تتطلب الحالة تحريك أي حصة.</td></tr>';
 
-      return '<h2>بيان الغياب والحركات — موجّه للمعلمين</h2>' +
+      return (manualEdits.length ? '<h2>سجل الحركات الآلية قبل التعديل اليدوي — يُعتمد الجدول المعدل أعلاه</h2>' : '<h2>بيان الغياب والحركات — موجّه للمعلمين</h2>') +
         '<div style="margin-bottom:4px;line-height:1.35">' + affected + '</div>' +
         '<table><thead><tr><th>المعلم المتحرك</th><th>المادة</th><th>الشعبة</th><th>من</th><th>إلى</th><th>سبب الحركة</th></tr></thead>' +
         '<tbody>' + rows + '</tbody></table>' +
-        '<div style="margin-top:4px;line-height:1.35;font-size:7.2pt">' + buildTeacherPrintAlerts(day) + '</div>';
+        '<div style="margin-top:4px;line-height:1.35;font-size:7.2pt">' +
+        (manualEdits.length ? manualEditsReport() : buildTeacherPrintAlerts(day)) + '</div>';
     }
 
     function buildOccupancyPrintNotice(day) {
@@ -4655,6 +4771,8 @@
       currentDay = day;
       currentDate = date || "";
       lastOperationType = "compensation";
+      manualEdits = [];
+      manualEditHistory = [];
       globalSearchInfo = null;
       absentList = Array.from(new Set(absentArray || []));
       // المراحل الثلاث تعمل آليًا؛ والحركة العكسية لا تُنفذ إلا داخل تبادل دائري مغلق وفحوص السلامة.
@@ -5353,6 +5471,8 @@
       currentDay = day;
       currentDate = getSelectedDate() || "";
       lastOperationType = "occupancy";
+      manualEdits = [];
+      manualEditHistory = [];
       globalSearchInfo = null;
       absentList = absent.slice();
 
@@ -5562,6 +5682,9 @@
       chainSeq = 0;
       globalSearchInfo = null;
       lastOperationType = "";
+      manualEdits = [];
+      manualEditHistory = [];
+      document.getElementById("manualEditTools").hidden = true;
       const filterInput = document.getElementById("teacherFilter");
       if (filterInput) {
         filterInput.value = "";
@@ -5571,6 +5694,8 @@
 
     function renderScheduleTable(day) {
       const wrapper = document.getElementById("scheduleTableWrapper");
+      const editable = lastOperationType === "compensation" && !document.body?.classList.contains("print-original");
+      document.getElementById("manualEditTools").hidden = !editable;
 
       let html = '<table class="schedule-table"><thead><tr>';
       html += "<th>الحصة</th>";
@@ -5635,6 +5760,9 @@
             cellClass = "cell-empty-original";
             content = "—";
           }
+          if (lesson.manualEdited) content += '<span class="move-badge">✎ يدوي</span>';
+          if (editable) content += '<button type="button" class="no-print" aria-label="تعديل ' + esc(cls) + ' الحصة ' + p +
+            '" onclick="openLessonEditor(' + ALL_CLASSES.indexOf(cls) + ',' + p + ')">✎ تعديل</button>';
           html += '<td class="' + cellClass + '">' + content + "</td>";
         }
         html += "</tr>";

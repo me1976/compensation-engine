@@ -57,6 +57,22 @@ for (const day of ['الأحد','الاثنين','الثلاثاء','الأرب�
   }
 }
 const elements = new Map();
+// Manual changes are transactional, reject conflicts, and do not alter the source.
+context.runEngine('الاثنين', '2026-09-15', ['زغارنه']);
+vm.runInContext(`
+  const manualSource = JSON.stringify(ORIGINAL_SCHEDULE);
+  const manualFieldBefore = JSON.stringify(FIELD_SCHEDULE);
+  const populated = ALL_CLASSES.filter(c => isActiveLesson(FIELD_SCHEDULE[currentDay][c][1]));
+  const firstClass = populated[0], secondClass = populated[1];
+  const secondTeacher = FIELD_SCHEDULE[currentDay][secondClass][1].teacher;
+  let rejected = false;
+  try { applyManualLessonEdit(firstClass, 1, secondTeacher, 'اختبار', 0); } catch (_) { rejected = true; }
+  if (!rejected || JSON.stringify(FIELD_SCHEDULE) !== manualFieldBefore) throw Error('Non-atomic manual conflict rejection');
+  applyManualLessonEdit(firstClass, 1, '', '', 0);
+  if (isActiveLesson(FIELD_SCHEDULE[currentDay][firstClass][1])) throw Error('Manual clear failed');
+  if (!buildTeacherPrintNotice(currentDay).includes('تعديلات يدوية')) throw Error('Missing manual print notice');
+  if (JSON.stringify(ORIGINAL_SCHEDULE) !== manualSource) throw Error('Source modified');
+`, context);
 context.document = {
   getElementById(id) {
     if (!elements.has(id)) elements.set(id, { value: '', innerHTML: '', style: {} });
