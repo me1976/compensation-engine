@@ -4388,6 +4388,7 @@
         for (const candidate of cross.plans) {
           candidate.purpose = "PRESSURE_GAP";
           if (executeCrossClass(candidate, day, chain)) {
+            chain.lastStageReached = "CROSS_CLASS";
             executedPlan = candidate;
             break;
           }
@@ -4428,11 +4429,26 @@
     function listVacancyActions(v, day) {
       const T = v.period, EndA = v.originalEnd;
       if (T === EndA) return [{ kind: "NO_ACTION" }];
-      const actions = findDirectPlans(v.className, T, EndA, day).map(plan => ({ kind: "DIRECT", plan }));
+      // Stage 1: a single pull that leaves the gap at the original end.
+      const tail = FIELD_SCHEDULE[day][v.className][EndA];
+      if (isActiveLesson(tail) && !tail.protectedTargetOf && isTeacherFree(tail.teacher, day, T)) {
+        return [{ kind: "DIRECT", plan: { fromPeriod: EndA, teacher: tail.teacher,
+          ripplePath: [], finalGap: EndA, reachedEnd: true } }];
+      }
+      // Stage 2: internal paths only. A remaining pressure gap is escalated later,
+      // after internal moves are exhausted; global search cannot skip these stages.
+      const internalPlans = findDirectPlans(v.className, T, EndA, day);
+      if (internalPlans.length) {
+        const completePlans = internalPlans.filter(plan => plan.reachedEnd);
+        return (completePlans.length ? completePlans : internalPlans)
+          .map(plan => ({ kind: "DIRECT", plan }));
+      }
+      // Stage 3 is available only when no internal plan can cover the target.
       const cross = findCrossClassPlans(v.className, T, EndA, day);
-      for (const plan of cross.plans) actions.push({ kind: "CROSS", plan, crossAttempts: cross.attempts });
-      actions.push({ kind: "FALLBACK", crossAttempts: cross.attempts });
-      return actions;
+      if (cross.plans.length) {
+        return cross.plans.map(plan => ({ kind: "CROSS", plan, crossAttempts: cross.attempts }));
+      }
+      return [{ kind: "FALLBACK", crossAttempts: cross.attempts }];
     }
 
     function applyVacancyAction(v, day, action) {
@@ -4455,8 +4471,10 @@
         executeMove(cls, best.fromPeriod, T, day, "DIRECT_TAIL_PULL",
           "تغطية فراغ غياب " + v.absentTeacher + " في الحصة " + T + " ضمن الخطة العالمية",
           chain.id);
-        chain.lastStageReached = "RIPPLE";
-        if (best.ripplePath.length) executeRipple(best.ripplePath, cls, day, chain.id);
+        if (best.ripplePath.length) {
+          chain.lastStageReached = "RIPPLE";
+          executeRipple(best.ripplePath, cls, day, chain.id);
+        }
         finalizeChain(chain, deriveChainMethod(chain), best.finalGap, EndA, day);
         v.status = chain.status;
       } else if (action.kind === "CROSS") {
@@ -4464,7 +4482,6 @@
         chain.crossAttempts = action.crossAttempts || [];
         if (!executeCrossClass(action.plan, day, chain)) throw new Error("تعذر تنفيذ بديل عالمي عابر للشعب");
         const gap = action.plan.candidateP;
-        chain.lastStageReached = "RIPPLE";
         const rp = findRipplePath(cls, gap, EndA, day);
         if (rp.path.length) executeRipple(rp.path, cls, day, chain.id);
         finalizeChain(chain, deriveChainMethod(chain), rp.finalGap, EndA, day);

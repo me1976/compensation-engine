@@ -71,4 +71,27 @@ for (const day of ['الأحد','الاثنين','الثلاثاء','الأرب�
   context.runOccupancy();
   assert.equal(vm.runInContext('Object.values(FIELD_SCHEDULE[currentDay]).some(row => Object.values(row).some(c => c.status === LessonStatus.OCCUPANCY && isExemptFromOccupancy(c.teacher)))', context), false);
 }
-console.log('PASS: occupancy limits, Ayman exclusion, 120 exhaustive comparisons, 10 compensation scenarios, 5 full occupancy runs');
+// Stage gates must not even request cross-class plans while an earlier stage works.
+const gates = vm.createContext({ assert });
+vm.runInContext([...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).join('\n'), gates);
+vm.runInContext(`
+  FIELD_SCHEDULE = {test: {A: {7: {teacher: 'T'}}}};
+  isActiveLesson = () => true;
+  isTeacherFree = () => true;
+  findDirectPlans = () => { throw new Error('Stage 2 invoked before stage 1 failed'); };
+  findCrossClassPlans = () => { throw new Error('Stage 3 invoked before stage 2 failed'); };
+  const vacancy = {className: 'A', period: 3, originalEnd: 7};
+  assert.equal(listVacancyActions(vacancy, 'test')[0].plan.fromPeriod, 7);
+  isTeacherFree = () => false;
+  findDirectPlans = () => [{reachedEnd: false}, {reachedEnd: true}];
+  assert.equal(listVacancyActions(vacancy, 'test').length, 1);
+  assert.equal(listVacancyActions(vacancy, 'test')[0].plan.reachedEnd, true);
+  findDirectPlans = () => [{reachedEnd: false}];
+  assert.equal(listVacancyActions(vacancy, 'test')[0].kind, 'DIRECT');
+  findDirectPlans = () => [];
+  findCrossClassPlans = () => ({plans: [{}], attempts: []});
+  assert.equal(listVacancyActions(vacancy, 'test')[0].kind, 'CROSS');
+  findCrossClassPlans = () => ({plans: [], attempts: []});
+  assert.equal(listVacancyActions(vacancy, 'test')[0].kind, 'FALLBACK');
+`, gates);
+console.log('PASS: strict stage gates, occupancy limits, Ayman exclusion, 120 exhaustive comparisons, 10 compensation scenarios, 5 full occupancy runs');
